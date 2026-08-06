@@ -29,6 +29,10 @@ export type LinhaCampanha = {
   leads: number;
   conversoes: number;
   acoes: Record<string, number> | null;
+  video_p25: number;
+  video_p50: number;
+  video_p75: number;
+  video_p100: number;
 };
 
 function iso(d: Date): string {
@@ -132,7 +136,11 @@ export type MetricaId =
   | "leads"
   | "cpl"
   | "conversoes"
-  | "taxa_conversao";
+  | "taxa_conversao"
+  | "video25"
+  | "video50"
+  | "video75"
+  | "video100";
 
 export const METRICAS: {
   id: MetricaId;
@@ -151,6 +159,10 @@ export const METRICAS: {
   { id: "cpl", label: "CPL", formato: "brl", inverso: true },
   { id: "conversoes", label: "Conversões", formato: "num" },
   { id: "taxa_conversao", label: "Taxa de conversão", formato: "pct" },
+  { id: "video25", label: "Reprodução de vídeo 25%", formato: "num" },
+  { id: "video50", label: "Reprodução de vídeo 50%", formato: "num" },
+  { id: "video75", label: "Reprodução de vídeo 75%", formato: "num" },
+  { id: "video100", label: "Reprodução de vídeo 100%", formato: "num" },
 ];
 
 export const METRICAS_PADRAO: MetricaId[] = [
@@ -189,6 +201,10 @@ export function totais(
   let cliques = 0;
   let leads = 0;
   let conversoes = 0;
+  let video25 = 0;
+  let video50 = 0;
+  let video75 = 0;
+  let video100 = 0;
 
   for (const linha of linhas) {
     investimento += linha.investimento;
@@ -200,6 +216,10 @@ export function totais(
     conversoes += linha.acoes
       ? contarAcao(linha.acoes, acaoConversao, ACOES_CONVERSAO_PADRAO)
       : linha.conversoes;
+    video25 += linha.video_p25 ?? 0;
+    video50 += linha.video_p50 ?? 0;
+    video75 += linha.video_p75 ?? 0;
+    video100 += linha.video_p100 ?? 0;
   }
 
   return {
@@ -213,6 +233,10 @@ export function totais(
     cpm: impressoes ? (investimento / impressoes) * 1000 : 0,
     cpl: leads ? investimento / leads : 0,
     taxa_conversao: cliques ? (leads / cliques) * 100 : 0,
+    video25,
+    video50,
+    video75,
+    video100,
   };
 }
 

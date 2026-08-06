@@ -9,6 +9,7 @@ import {
   contarAcao,
   ehMetricaValida,
 } from "@/lib/metricas";
+import { ehMetricaInstagramValida } from "@/lib/metricas-instagram";
 
 const clienteSchema = z.object({
   nome: z.string().trim().min(1).max(160),
@@ -47,6 +48,11 @@ const configSchema = z.object({
   acao_conversao: z.string().max(120).nullable(),
 });
 
+const configInstagramSchema = z.object({
+  clienteId: z.string().uuid(),
+  metricas: z.array(z.string()).max(20),
+});
+
 const instagramIdSchema = z.object({
   clienteId: z.string().uuid(),
   instagram_business_account_id: z.string().trim().min(1).max(60),
@@ -59,6 +65,12 @@ const sincronizarInstagramSchema = z
     ate: dataISO,
   })
   .refine((v) => v.desde <= v.ate, { message: "A data inicial deve vir antes da final." });
+
+const loginClienteSchema = z.object({
+  clienteId: z.string().uuid(),
+  email: z.string().trim().email().max(200),
+  senha: z.string().min(6).max(200),
+});
 
 /**
  * O client tipado é gerado pelo Lovable a partir do schema; enquanto os tipos
@@ -189,6 +201,10 @@ async function sincronizar(
     acoes: dia.acoes,
     leads: contarAcao(dia.acoes, config?.acao_lead ?? null, ACOES_LEAD_PADRAO),
     conversoes: contarAcao(dia.acoes, config?.acao_conversao ?? null, ACOES_CONVERSAO_PADRAO),
+    video_p25: dia.video25,
+    video_p50: dia.video50,
+    video_p75: dia.video75,
+    video_p100: dia.video100,
     atualizado_em: new Date().toISOString(),
   }));
 
@@ -211,6 +227,10 @@ async function sincronizar(
     acoes: dia.acoes,
     leads: contarAcao(dia.acoes, config?.acao_lead ?? null, ACOES_LEAD_PADRAO),
     conversoes: contarAcao(dia.acoes, config?.acao_conversao ?? null, ACOES_CONVERSAO_PADRAO),
+    video_p25: dia.video25,
+    video_p50: dia.video50,
+    video_p75: dia.video75,
+    video_p100: dia.video100,
     atualizado_em: new Date().toISOString(),
   }));
 
@@ -492,6 +512,25 @@ export const salvarConfigMetricas = createServerFn({ method: "POST" })
     return { metricas };
   });
 
+/** Mesma ideia de `salvarConfigMetricas`, para os KPIs do dashboard de Instagram. */
+export const salvarConfigMetricasInstagram = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => configInstagramSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    await exigirEdicaoDeClientes(context.supabase as unknown as SupabaseClient, context.userId);
+    const db = await admin();
+
+    const metricas = data.metricas.filter(ehMetricaInstagramValida);
+
+    const { error } = await db
+      .from("clientes")
+      .update({ instagram_kpis: metricas })
+      .eq("id", data.clienteId);
+
+    if (error) throw new Error(erroDoBanco(error, "Não foi possível salvar a configuração."));
+    return { metricas };
+  });
+
 /**
  * Guarda o ID da conta do Instagram Business, valida com o token da Meta já
  * salvo (é o mesmo token, sem campo próprio) e faz a primeira carga.
@@ -545,4 +584,76 @@ export const sincronizarMetricasInstagram = createServerFn({ method: "POST" })
     await exigirEdicaoDeClientes(context.supabase as unknown as SupabaseClient, context.userId);
     const db = await admin();
     return await sincronizarInstagram(db, data.clienteId, { desde: data.desde, ate: data.ate });
+  });
+
+/**
+ * Cria (ou reaproveita) o login do cliente e o vincula ao registro em
+ * `clientes` — é assim que, ao entrar, ele cai direto na área dele: o
+ * redirecionamento por role já lê `profiles.cliente_id`.
+ *
+ * `auth.admin.createUser` cria a conta já confirmada (a agência está
+ * configurando em nome do cliente, não faz sentido exigir clique de e-mail).
+ * Se o e-mail já tiver conta, atualiza a senha e só vincula o cliente_id.
+ */
+export const criarLoginCliente = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => loginClienteSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    await exigirEdicaoDeClientes(context.supabase as unknown as SupabaseClient, context.userId);
+    const db = await admin();
+
+    const { data: cliente } = await db
+      .from("clientes")
+      .select("nome")
+      .eq("id", data.clienteId)
+      .maybeSingle();
+    if (!cliente) throw new Error("Cliente não encontrado.");
+    const nomeCliente = (cliente as { nome: string }).nome;
+
+    const criacao = await db.auth.admin.createUser({
+      email: data.email,
+      password: data.senha,
+      email_confirm: true,
+      user_metadata: { nome: nomeCliente },
+    });
+
+    let userId: string;
+    let criouConta: boolean;
+
+    if (criacao.error) {
+      const jaExiste = /already|existe/i.test(criacao.error.message ?? "");
+      if (!jaExiste) {
+        throw new Error(`Não foi possível criar o login: ${criacao.error.message}`);
+      }
+
+      const { data: perfisExistentes } = await db
+        .from("profiles")
+        .select("id")
+        .eq("email", data.email)
+        .limit(1);
+      const perfilExistente = (perfisExistentes as { id: string }[] | null)?.[0];
+      if (!perfilExistente) {
+        throw new Error("Já existe uma conta com esse e-mail, mas não foi possível localizá-la.");
+      }
+      userId = perfilExistente.id;
+      criouConta = false;
+
+      const { error: erroSenha } = await db.auth.admin.updateUserById(userId, {
+        password: data.senha,
+      });
+      if (erroSenha) throw new Error(`Não foi possível atualizar a senha: ${erroSenha.message}`);
+    } else {
+      userId = criacao.data.user.id;
+      criouConta = true;
+    }
+
+    const { error: erroPerfil } = await db
+      .from("profiles")
+      .update({ cliente_id: data.clienteId, role: "cliente" })
+      .eq("id", userId);
+    if (erroPerfil) {
+      throw new Error(erroDoBanco(erroPerfil, "Login criado, mas não foi possível vincular ao cliente."));
+    }
+
+    return { criouConta, email: data.email };
   });

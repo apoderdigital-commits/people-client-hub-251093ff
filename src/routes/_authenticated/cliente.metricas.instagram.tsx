@@ -20,6 +20,11 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Perfil } from "@/hooks/use-auth";
 import { useClienteSelecionado } from "@/lib/visao-cliente";
 import { sincronizarMetricasInstagram } from "@/lib/clientes.functions";
+import {
+  lerMetricasInstagramConfig,
+  METRICAS_INSTAGRAM,
+  type MetricaInstagramId,
+} from "@/lib/metricas-instagram";
 
 export const Route = createFileRoute("/_authenticated/cliente/metricas/instagram")({
   head: () => ({
@@ -133,6 +138,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
   const [periodo, setPeriodo] = useState<PeriodoId>("30d");
   const [linhas, setLinhas] = useState<LinhaInstagram[]>([]);
   const [publicacoes, setPublicacoes] = useState<Publicacao[]>([]);
+  const [kpis, setKpis] = useState<MetricaInstagramId[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
@@ -152,7 +158,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
     }
     setCarregando(true);
 
-    const [metricas, posts] = await Promise.all([
+    const [metricas, posts, cliente] = await Promise.all([
       db
         .from("metricas_instagram_diarias")
         .select("data, seguidores, alcance, visitas_perfil, curtidas, comentarios, compartilhamentos")
@@ -166,6 +172,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
         .eq("cliente_id", clienteId)
         .order("publicado_em", { ascending: false })
         .limit(8),
+      db.from("clientes").select("instagram_kpis").eq("id", clienteId).maybeSingle(),
     ]);
 
     if (metricas.error) setErro(metricas.error.message);
@@ -174,6 +181,11 @@ function Painel({ perfil }: { perfil: Perfil }) {
       setLinhas((metricas.data as LinhaInstagram[]) ?? []);
     }
     setPublicacoes((posts.data as Publicacao[]) ?? []);
+    setKpis(
+      lerMetricasInstagramConfig(
+        (cliente.data as { instagram_kpis?: unknown } | null)?.instagram_kpis,
+      ),
+    );
     setCarregando(false);
   }, [clienteId, janela, janelaAnt]);
 
@@ -238,19 +250,19 @@ function Painel({ perfil }: { perfil: Perfil }) {
       atual: {
         seguidores: seguidoresAtual,
         alcance,
-        visitasPerfil,
+        visitas_perfil: visitasPerfil,
         curtidas,
         comentarios,
         engajamento,
-      },
+      } as Record<MetricaInstagramId, number>,
       anterior: {
         seguidores: seguidoresAnteriorFim,
         alcance: alcanceAnterior,
-        visitasPerfil: visitasAnterior,
+        visitas_perfil: visitasAnterior,
         curtidas: curtidasAnterior,
         comentarios: comentariosAnterior,
         engajamento: engajamentoAnterior,
-      },
+      } as Record<MetricaInstagramId, number>,
       grafico: daJanela.map((d) => ({
         data: diaCurto(d.data),
         seguidores: d.seguidores,
@@ -321,36 +333,19 @@ function Painel({ perfil }: { perfil: Perfil }) {
       ) : (
         <>
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard
-              rotulo="Seguidores"
-              valor={num.format(atual.seguidores)}
-              variacao={variacao(atual.seguidores, anterior.seguidores)}
-            />
-            <KpiCard
-              rotulo="Alcance"
-              valor={num.format(atual.alcance)}
-              variacao={variacao(atual.alcance, anterior.alcance)}
-            />
-            <KpiCard
-              rotulo="Taxa de Engajamento"
-              valor={`${atual.engajamento.toFixed(2)}%`}
-              variacao={variacao(atual.engajamento, anterior.engajamento)}
-            />
-            <KpiCard
-              rotulo="Visitas ao Perfil"
-              valor={num.format(atual.visitasPerfil)}
-              variacao={variacao(atual.visitasPerfil, anterior.visitasPerfil)}
-            />
-            <KpiCard
-              rotulo="Curtidas"
-              valor={num.format(atual.curtidas)}
-              variacao={variacao(atual.curtidas, anterior.curtidas)}
-            />
-            <KpiCard
-              rotulo="Comentários"
-              valor={num.format(atual.comentarios)}
-              variacao={variacao(atual.comentarios, anterior.comentarios)}
-            />
+            {kpis.map((id) => {
+              const meta = METRICAS_INSTAGRAM.find((m) => m.id === id);
+              if (!meta) return null;
+              const valor = atual[id];
+              return (
+                <KpiCard
+                  key={id}
+                  rotulo={meta.label}
+                  valor={meta.formato === "pct" ? `${valor.toFixed(2)}%` : num.format(valor)}
+                  variacao={variacao(valor, anterior[id])}
+                />
+              );
+            })}
           </div>
 
           <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">

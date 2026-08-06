@@ -17,6 +17,10 @@ export type InsightDiario = {
   cliques: number;
   /** Todas as ações devolvidas pela Meta, por action_type. */
   acoes: Record<string, number>;
+  video25: number;
+  video50: number;
+  video75: number;
+  video100: number;
 };
 
 export type InsightCampanha = InsightDiario & {
@@ -24,14 +28,20 @@ export type InsightCampanha = InsightDiario & {
   campanhaNome: string;
 };
 
+type AcaoBruta = { action_type?: string; value?: string };
+
 type LinhaInsight = {
   date_start?: string;
   spend?: string;
   impressions?: string;
   clicks?: string;
-  actions?: { action_type?: string; value?: string }[];
+  actions?: AcaoBruta[];
   campaign_id?: string;
   campaign_name?: string;
+  video_p25_watched_actions?: AcaoBruta[];
+  video_p50_watched_actions?: AcaoBruta[];
+  video_p75_watched_actions?: AcaoBruta[];
+  video_p100_watched_actions?: AcaoBruta[];
 };
 
 type ErroMeta = { message?: string; type?: string; code?: number; error_subcode?: number };
@@ -47,6 +57,10 @@ export function normalizarConta(id: string): string {
 function numero(valor: string | undefined): number {
   const n = Number(valor);
   return Number.isFinite(n) ? n : 0;
+}
+
+function somarAcoes(lista: AcaoBruta[] | undefined): number {
+  return (lista ?? []).reduce((acc, a) => acc + numero(a.value), 0);
 }
 
 /** Mensagens da Meta chegam em inglês e sem contexto; traduzimos as comuns. */
@@ -126,11 +140,11 @@ async function coletarInsights(
   const url = new URL(`${BASE}/${conta}/insights`);
   url.searchParams.set("level", nivel);
   url.searchParams.set("time_increment", "1");
+  const camposComuns =
+    "spend,impressions,clicks,actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions";
   url.searchParams.set(
     "fields",
-    nivel === "campaign"
-      ? "spend,impressions,clicks,actions,campaign_id,campaign_name"
-      : "spend,impressions,clicks,actions",
+    nivel === "campaign" ? `${camposComuns},campaign_id,campaign_name` : camposComuns,
   );
   url.searchParams.set(
     "time_range",
@@ -162,6 +176,10 @@ function converter(linha: LinhaInsight): InsightDiario {
     impressoes: numero(linha.impressions),
     cliques: numero(linha.clicks),
     acoes,
+    video25: somarAcoes(linha.video_p25_watched_actions),
+    video50: somarAcoes(linha.video_p50_watched_actions),
+    video75: somarAcoes(linha.video_p75_watched_actions),
+    video100: somarAcoes(linha.video_p100_watched_actions),
   };
 }
 
