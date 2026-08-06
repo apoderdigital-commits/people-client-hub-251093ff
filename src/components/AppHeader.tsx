@@ -60,6 +60,15 @@ export function AppHeader({ perfil }: { perfil: Perfil | null }) {
                   Equipe
                 </Link>
               ) : null}
+              {verEquipe ? (
+                <Link
+                  to="/agencia/automacoes"
+                  activeProps={{ className: "bg-shell-2 text-shell-foreground" }}
+                  className={linkBase}
+                >
+                  Automações
+                </Link>
+              ) : null}
             </nav>
           ) : null}
         </div>
