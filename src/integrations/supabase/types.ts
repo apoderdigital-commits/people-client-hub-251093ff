@@ -73,6 +73,44 @@ export type Database = {
         }
         Relationships: []
       }
+      automacoes_credenciais: {
+        Row: {
+          config: Json
+          created_at: string
+          criado_por: string | null
+          id: string
+          nome: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome: string
+          tipo?: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "automacoes_credenciais_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       automacoes_execucoes: {
         Row: {
           automacao_id: string
