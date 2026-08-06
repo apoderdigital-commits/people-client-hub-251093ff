@@ -17,10 +17,21 @@ export type InsightDiario = {
   cliques: number;
   /** Todas as ações devolvidas pela Meta, por action_type. */
   acoes: Record<string, number>;
+  alcance: number;
+  cliquesUnicos: number;
+  cliquesLink: number;
+  cliquesLinkUnicos: number;
+  cliquesSaida: number;
   video25: number;
   video50: number;
   video75: number;
+  video95: number;
   video100: number;
+  videoThruplay: number;
+  video15s: number;
+  videoContinuo2s: number;
+  videoTempoMedio: number;
+  reconhecimentoEst: number;
 };
 
 export type InsightCampanha = InsightDiario & {
@@ -38,10 +49,21 @@ type LinhaInsight = {
   actions?: AcaoBruta[];
   campaign_id?: string;
   campaign_name?: string;
+  reach?: string;
+  unique_clicks?: string;
+  inline_link_clicks?: string;
+  unique_inline_link_clicks?: string;
+  outbound_clicks?: AcaoBruta[];
   video_p25_watched_actions?: AcaoBruta[];
   video_p50_watched_actions?: AcaoBruta[];
   video_p75_watched_actions?: AcaoBruta[];
+  video_p95_watched_actions?: AcaoBruta[];
   video_p100_watched_actions?: AcaoBruta[];
+  video_thruplay_watched_actions?: AcaoBruta[];
+  video_15_sec_watched_actions?: AcaoBruta[];
+  video_continuous_2_sec_watched_actions?: AcaoBruta[];
+  video_avg_time_watched_actions?: AcaoBruta[];
+  estimated_ad_recallers?: string;
 };
 
 type ErroMeta = { message?: string; type?: string; code?: number; error_subcode?: number };
@@ -132,6 +154,12 @@ export async function validarCredenciais(
  */
 type Periodo = { adAccountId: string; token: string; desde: string; ate: string };
 
+const CAMPOS_INSIGHTS =
+  "spend,impressions,clicks,actions,reach,unique_clicks,inline_link_clicks,unique_inline_link_clicks,outbound_clicks," +
+  "video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions," +
+  "video_thruplay_watched_actions,video_15_sec_watched_actions,video_continuous_2_sec_watched_actions,video_avg_time_watched_actions," +
+  "estimated_ad_recallers";
+
 async function coletarInsights(
   opts: Periodo,
   nivel: "account" | "campaign",
@@ -140,11 +168,9 @@ async function coletarInsights(
   const url = new URL(`${BASE}/${conta}/insights`);
   url.searchParams.set("level", nivel);
   url.searchParams.set("time_increment", "1");
-  const camposComuns =
-    "spend,impressions,clicks,actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions";
   url.searchParams.set(
     "fields",
-    nivel === "campaign" ? `${camposComuns},campaign_id,campaign_name` : camposComuns,
+    nivel === "campaign" ? `${CAMPOS_INSIGHTS},campaign_id,campaign_name` : CAMPOS_INSIGHTS,
   );
   url.searchParams.set(
     "time_range",
@@ -176,10 +202,21 @@ function converter(linha: LinhaInsight): InsightDiario {
     impressoes: numero(linha.impressions),
     cliques: numero(linha.clicks),
     acoes,
+    alcance: numero(linha.reach),
+    cliquesUnicos: numero(linha.unique_clicks),
+    cliquesLink: numero(linha.inline_link_clicks),
+    cliquesLinkUnicos: numero(linha.unique_inline_link_clicks),
+    cliquesSaida: somarAcoes(linha.outbound_clicks),
     video25: somarAcoes(linha.video_p25_watched_actions),
     video50: somarAcoes(linha.video_p50_watched_actions),
     video75: somarAcoes(linha.video_p75_watched_actions),
+    video95: somarAcoes(linha.video_p95_watched_actions),
     video100: somarAcoes(linha.video_p100_watched_actions),
+    videoThruplay: somarAcoes(linha.video_thruplay_watched_actions),
+    video15s: somarAcoes(linha.video_15_sec_watched_actions),
+    videoContinuo2s: somarAcoes(linha.video_continuous_2_sec_watched_actions),
+    videoTempoMedio: somarAcoes(linha.video_avg_time_watched_actions),
+    reconhecimentoEst: numero(linha.estimated_ad_recallers),
   };
 }
 
@@ -245,6 +282,91 @@ export async function buscarStatusCampanhas(
   }
 
   return status;
+}
+
+// --- segmentações (idade, gênero, plataforma, posicionamento, dispositivo, região, hora) ---
+
+export type DimensaoSegmentacao =
+  | "age"
+  | "gender"
+  | "publisher_platform"
+  | "platform_position"
+  | "impression_device"
+  | "region"
+  | "hourly_stats_aggregated_by_advertiser_time_zone";
+
+export type LinhaSegmentada = { valor: string; investimento: number; impressoes: number; cliques: number; leads: number };
+
+const ACOES_LEAD_PADRAO_SERVER = [
+  "onsite_conversion.lead_grouped",
+  "leadgen_grouped",
+  "lead",
+  "offsite_conversion.fb_pixel_lead",
+];
+
+/**
+ * Uma chamada por dimensão: a Meta não deixa combinar `hourly_stats_...` com
+ * as demais, e manter uma dimensão por chamada evita cruzar combinações que
+ * ninguém pediu (idade × gênero × plataforma...).
+ */
+export async function buscarSegmentacao(
+  opts: Periodo,
+  dimensao: DimensaoSegmentacao,
+  acaoLead: string | null,
+): Promise<LinhaSegmentada[]> {
+  const conta = normalizarConta(opts.adAccountId);
+  const url = new URL(`${BASE}/${conta}/insights`);
+  url.searchParams.set("level", "account");
+  url.searchParams.set("breakdowns", dimensao);
+  url.searchParams.set("fields", "spend,impressions,clicks,actions");
+  url.searchParams.set("time_range", JSON.stringify({ since: opts.desde, until: opts.ate }));
+  url.searchParams.set("limit", "500");
+  url.searchParams.set("access_token", opts.token);
+
+  type LinhaSeg = LinhaInsight & {
+    age?: string;
+    gender?: string;
+    publisher_platform?: string;
+    platform_position?: string;
+    impression_device?: string;
+    region?: string;
+    hourly_stats_aggregated_by_advertiser_time_zone?: string;
+  };
+
+  const linhas: LinhaSeg[] = [];
+  let proxima: string | undefined = url.toString();
+  for (let pagina = 0; proxima && pagina < MAX_PAGINAS; pagina++) {
+    const corpo: Resposta<LinhaSeg> = await pedir<LinhaSeg>(proxima);
+    linhas.push(...(corpo.data ?? []));
+    proxima = corpo.paging?.next;
+  }
+
+  const acumulado = new Map<string, LinhaSegmentada>();
+  for (const linha of linhas) {
+    const valor = (linha[dimensao] as string | undefined) ?? "Não informado";
+    const atual = acumulado.get(valor) ?? { valor, investimento: 0, impressoes: 0, cliques: 0, leads: 0 };
+    const acoes: Record<string, number> = {};
+    for (const acao of linha.actions ?? []) {
+      if (acao.action_type) acoes[acao.action_type] = numero(acao.value);
+    }
+    let leads = 0;
+    if (acaoLead) leads = acoes[acaoLead] ?? 0;
+    else {
+      for (const tipo of ACOES_LEAD_PADRAO_SERVER) {
+        if (acoes[tipo] !== undefined) {
+          leads = acoes[tipo];
+          break;
+        }
+      }
+    }
+    atual.investimento += numero(linha.spend);
+    atual.impressoes += numero(linha.impressions);
+    atual.cliques += numero(linha.clicks);
+    atual.leads += leads;
+    acumulado.set(valor, atual);
+  }
+
+  return [...acumulado.values()];
 }
 
 // A escolha de qual ação conta como lead vive em `@/lib/metricas`, junto do

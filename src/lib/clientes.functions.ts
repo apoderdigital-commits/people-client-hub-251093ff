@@ -230,7 +230,18 @@ async function sincronizar(
     video_p25: dia.video25,
     video_p50: dia.video50,
     video_p75: dia.video75,
+    video_p95: dia.video95,
     video_p100: dia.video100,
+    alcance: dia.alcance,
+    cliques_unicos: dia.cliquesUnicos,
+    cliques_link: dia.cliquesLink,
+    cliques_link_unicos: dia.cliquesLinkUnicos,
+    cliques_saida: dia.cliquesSaida,
+    video_thruplay: dia.videoThruplay,
+    video_15s: dia.video15s,
+    video_continuo_2s: dia.videoContinuo2s,
+    video_tempo_medio: dia.videoTempoMedio,
+    reconhecimento_est: dia.reconhecimentoEst,
     atualizado_em: new Date().toISOString(),
   }));
 
@@ -241,6 +252,50 @@ async function sincronizar(
     if (error) {
       throw new Error(erroDoBanco(error, "Não foi possível gravar as métricas por campanha."));
     }
+  }
+
+  // Segmentações (idade, gênero, plataforma, posicionamento, dispositivo,
+  // região, hora do dia): só na sincronização manual, de propósito — cada
+  // dimensão é uma chamada à parte à Meta, e rodar isso pra todos os clientes
+  // toda vez que a automação de horário dispara multiplicaria as chamadas à
+  // API sem necessidade.
+  try {
+    const DIMENSOES: { id: Parameters<typeof meta.buscarSegmentacao>[1]; nome: string }[] = [
+      { id: "age", nome: "idade" },
+      { id: "gender", nome: "genero" },
+      { id: "publisher_platform", nome: "plataforma" },
+      { id: "platform_position", nome: "posicionamento" },
+      { id: "impression_device", nome: "dispositivo" },
+      { id: "region", nome: "regiao" },
+      { id: "hourly_stats_aggregated_by_advertiser_time_zone", nome: "hora" },
+    ];
+    const dataSnapshot = new Date().toISOString().slice(0, 10);
+    for (const dimensao of DIMENSOES) {
+      const linhasSegmentadas = await meta.buscarSegmentacao(
+        { adAccountId: conta, token, desde, ate },
+        dimensao.id,
+        config?.acao_lead ?? null,
+      );
+      const paraGravar = linhasSegmentadas.map((l) => ({
+        cliente_id: clienteId,
+        dimensao: dimensao.nome,
+        valor: l.valor,
+        data: dataSnapshot,
+        investimento: l.investimento,
+        impressoes: l.impressoes,
+        cliques: l.cliques,
+        leads: l.leads,
+        atualizado_em: new Date().toISOString(),
+      }));
+      if (paraGravar.length > 0) {
+        await db
+          .from("metricas_campanhas_segmentadas")
+          .upsert(paraGravar, { onConflict: "cliente_id,dimensao,valor,data" });
+      }
+    }
+  } catch {
+    // Segmentação é um extra do dashboard, não o sync principal — uma falha
+    // aqui não deve derrubar a sincronização de métricas em si.
   }
 
   await db

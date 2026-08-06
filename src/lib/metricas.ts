@@ -32,7 +32,18 @@ export type LinhaCampanha = {
   video_p25: number;
   video_p50: number;
   video_p75: number;
+  video_p95: number;
   video_p100: number;
+  alcance: number;
+  cliques_unicos: number;
+  cliques_link: number;
+  cliques_link_unicos: number;
+  cliques_saida: number;
+  video_thruplay: number;
+  video_15s: number;
+  video_continuo_2s: number;
+  video_tempo_medio: number;
+  reconhecimento_est: number;
 };
 
 function iso(d: Date): string {
@@ -140,29 +151,93 @@ export type MetricaId =
   | "video25"
   | "video50"
   | "video75"
-  | "video100";
+  | "video95"
+  | "video100"
+  | "alcance"
+  | "frequencia"
+  | "cliques_unicos"
+  | "ctr_unico"
+  | "cliques_link"
+  | "ctr_link"
+  | "cliques_link_unicos"
+  | "ctr_link_unico"
+  | "cliques_saida"
+  | "ctr_saida"
+  | "custo_clique_unico"
+  | "custo_clique_saida"
+  | "custo_mil_alcancadas"
+  | "engajamento_publicacao"
+  | "custo_por_engajamento"
+  | "reacoes"
+  | "custo_por_reacao"
+  | "comentarios"
+  | "custo_por_comentario"
+  | "compartilhamentos"
+  | "custo_por_compartilhamento"
+  | "curtidas_pagina"
+  | "custo_por_curtida"
+  | "respostas_evento"
+  | "video_thruplay"
+  | "video_15s"
+  | "video_continuo_2s"
+  | "video_tempo_medio"
+  | "custo_por_thruplay"
+  | "reconhecimento_est"
+  | "custo_por_reconhecimento";
 
 export const METRICAS: {
   id: MetricaId;
   label: string;
-  formato: "brl" | "num" | "pct";
+  formato: "brl" | "num" | "pct" | "dec";
   /** true quando aumentar é ruim (custos). */
   inverso?: boolean;
 }[] = [
   { id: "investimento", label: "Investimento", formato: "brl" },
   { id: "impressoes", label: "Impressões", formato: "num" },
-  { id: "cliques", label: "Cliques", formato: "num" },
-  { id: "ctr", label: "CTR", formato: "pct" },
-  { id: "cpc", label: "CPC", formato: "brl", inverso: true },
+  { id: "alcance", label: "Alcance", formato: "num" },
+  { id: "frequencia", label: "Frequência", formato: "dec" },
+  { id: "cliques", label: "Cliques (todos)", formato: "num" },
+  { id: "ctr", label: "CTR (todos)", formato: "pct" },
+  { id: "cliques_unicos", label: "Cliques únicos (todos)", formato: "num" },
+  { id: "ctr_unico", label: "CTR único (todos)", formato: "pct" },
+  { id: "cliques_link", label: "Cliques no link", formato: "num" },
+  { id: "ctr_link", label: "CTR (link)", formato: "pct" },
+  { id: "cliques_link_unicos", label: "Cliques únicos no link", formato: "num" },
+  { id: "ctr_link_unico", label: "CTR único (link)", formato: "pct" },
+  { id: "cliques_saida", label: "Cliques de saída", formato: "num" },
+  { id: "ctr_saida", label: "CTR de saída", formato: "pct" },
+  { id: "cpc", label: "CPC (todos)", formato: "brl", inverso: true },
   { id: "cpm", label: "CPM", formato: "brl", inverso: true },
+  { id: "custo_clique_unico", label: "Custo por clique único", formato: "brl", inverso: true },
+  { id: "custo_clique_saida", label: "Custo por clique de saída", formato: "brl", inverso: true },
+  { id: "custo_mil_alcancadas", label: "Custo por 1.000 alcançadas", formato: "brl", inverso: true },
   { id: "leads", label: "Leads", formato: "num" },
   { id: "cpl", label: "CPL", formato: "brl", inverso: true },
   { id: "conversoes", label: "Conversões", formato: "num" },
   { id: "taxa_conversao", label: "Taxa de conversão", formato: "pct" },
+  { id: "engajamento_publicacao", label: "Engajamento com a publicação", formato: "num" },
+  { id: "custo_por_engajamento", label: "Custo por engajamento", formato: "brl", inverso: true },
+  { id: "reacoes", label: "Reações à publicação", formato: "num" },
+  { id: "custo_por_reacao", label: "Custo por reação", formato: "brl", inverso: true },
+  { id: "comentarios", label: "Comentários da publicação", formato: "num" },
+  { id: "custo_por_comentario", label: "Custo por comentário", formato: "brl", inverso: true },
+  { id: "compartilhamentos", label: "Compartilhamentos da publicação", formato: "num" },
+  { id: "custo_por_compartilhamento", label: "Custo por compartilhamento", formato: "brl", inverso: true },
+  { id: "curtidas_pagina", label: "Curtidas da página", formato: "num" },
+  { id: "custo_por_curtida", label: "Custo por curtida na página", formato: "brl", inverso: true },
+  { id: "respostas_evento", label: "Respostas a eventos", formato: "num" },
   { id: "video25", label: "Reprodução de vídeo 25%", formato: "num" },
   { id: "video50", label: "Reprodução de vídeo 50%", formato: "num" },
   { id: "video75", label: "Reprodução de vídeo 75%", formato: "num" },
+  { id: "video95", label: "Reprodução de vídeo 95%", formato: "num" },
   { id: "video100", label: "Reprodução de vídeo 100%", formato: "num" },
+  { id: "video_thruplay", label: "ThruPlays", formato: "num" },
+  { id: "video_15s", label: "Reproduções de 15 segundos", formato: "num" },
+  { id: "video_continuo_2s", label: "Reproduções contínuas de 2 segundos", formato: "num" },
+  { id: "video_tempo_medio", label: "Tempo médio de reprodução (seg)", formato: "dec" },
+  { id: "custo_por_thruplay", label: "Custo por ThruPlay", formato: "brl", inverso: true },
+  { id: "reconhecimento_est", label: "Aumento estimado de reconhecimento", formato: "num" },
+  { id: "custo_por_reconhecimento", label: "Custo por pessoa com reconhecimento", formato: "brl", inverso: true },
 ];
 
 export const METRICAS_PADRAO: MetricaId[] = [
@@ -204,7 +279,25 @@ export function totais(
   let video25 = 0;
   let video50 = 0;
   let video75 = 0;
+  let video95 = 0;
   let video100 = 0;
+  let alcance = 0;
+  let cliquesUnicos = 0;
+  let cliquesLink = 0;
+  let cliquesLinkUnicos = 0;
+  let cliquesSaida = 0;
+  let engajamentoPublicacao = 0;
+  let reacoes = 0;
+  let comentarios = 0;
+  let compartilhamentos = 0;
+  let curtidasPagina = 0;
+  let respostasEvento = 0;
+  let videoThruplay = 0;
+  let video15s = 0;
+  let videoContinuo2s = 0;
+  let somaTempoMedio = 0;
+  let linhasComTempoMedio = 0;
+  let reconhecimentoEst = 0;
 
   for (const linha of linhas) {
     investimento += linha.investimento;
@@ -219,24 +312,78 @@ export function totais(
     video25 += linha.video_p25 ?? 0;
     video50 += linha.video_p50 ?? 0;
     video75 += linha.video_p75 ?? 0;
+    video95 += linha.video_p95 ?? 0;
     video100 += linha.video_p100 ?? 0;
+    alcance += linha.alcance ?? 0;
+    cliquesUnicos += linha.cliques_unicos ?? 0;
+    cliquesLink += linha.cliques_link ?? 0;
+    cliquesLinkUnicos += linha.cliques_link_unicos ?? 0;
+    cliquesSaida += linha.cliques_saida ?? 0;
+    videoThruplay += linha.video_thruplay ?? 0;
+    video15s += linha.video_15s ?? 0;
+    videoContinuo2s += linha.video_continuo_2s ?? 0;
+    reconhecimentoEst += linha.reconhecimento_est ?? 0;
+    if (linha.video_tempo_medio) {
+      somaTempoMedio += linha.video_tempo_medio;
+      linhasComTempoMedio += 1;
+    }
+    if (linha.acoes) {
+      engajamentoPublicacao += linha.acoes["post_engagement"] ?? 0;
+      reacoes += linha.acoes["post_reaction"] ?? 0;
+      comentarios += linha.acoes["comment"] ?? 0;
+      compartilhamentos += linha.acoes["post"] ?? 0;
+      curtidasPagina += linha.acoes["like"] ?? 0;
+      respostasEvento += linha.acoes["rsvp"] ?? 0;
+    }
   }
 
   return {
     investimento,
     impressoes,
+    alcance,
+    frequencia: alcance ? impressoes / alcance : 0,
     cliques,
-    leads,
-    conversoes,
     ctr: impressoes ? (cliques / impressoes) * 100 : 0,
+    cliques_unicos: cliquesUnicos,
+    ctr_unico: alcance ? (cliquesUnicos / alcance) * 100 : 0,
+    cliques_link: cliquesLink,
+    ctr_link: impressoes ? (cliquesLink / impressoes) * 100 : 0,
+    cliques_link_unicos: cliquesLinkUnicos,
+    ctr_link_unico: alcance ? (cliquesLinkUnicos / alcance) * 100 : 0,
+    cliques_saida: cliquesSaida,
+    ctr_saida: impressoes ? (cliquesSaida / impressoes) * 100 : 0,
     cpc: cliques ? investimento / cliques : 0,
     cpm: impressoes ? (investimento / impressoes) * 1000 : 0,
+    custo_clique_unico: cliquesUnicos ? investimento / cliquesUnicos : 0,
+    custo_clique_saida: cliquesSaida ? investimento / cliquesSaida : 0,
+    custo_mil_alcancadas: alcance ? (investimento / alcance) * 1000 : 0,
+    leads,
     cpl: leads ? investimento / leads : 0,
+    conversoes,
     taxa_conversao: cliques ? (leads / cliques) * 100 : 0,
+    engajamento_publicacao: engajamentoPublicacao,
+    custo_por_engajamento: engajamentoPublicacao ? investimento / engajamentoPublicacao : 0,
+    reacoes,
+    custo_por_reacao: reacoes ? investimento / reacoes : 0,
+    comentarios,
+    custo_por_comentario: comentarios ? investimento / comentarios : 0,
+    compartilhamentos,
+    custo_por_compartilhamento: compartilhamentos ? investimento / compartilhamentos : 0,
+    curtidas_pagina: curtidasPagina,
+    custo_por_curtida: curtidasPagina ? investimento / curtidasPagina : 0,
+    respostas_evento: respostasEvento,
     video25,
     video50,
     video75,
+    video95,
     video100,
+    video_thruplay: videoThruplay,
+    video_15s: video15s,
+    video_continuo_2s: videoContinuo2s,
+    video_tempo_medio: linhasComTempoMedio ? somaTempoMedio / linhasComTempoMedio : 0,
+    custo_por_thruplay: videoThruplay ? investimento / videoThruplay : 0,
+    reconhecimento_est: reconhecimentoEst,
+    custo_por_reconhecimento: reconhecimentoEst ? investimento / reconhecimentoEst : 0,
   };
 }
 
@@ -306,4 +453,55 @@ export function porCampanha(
   return [...mapa.entries()]
     .map(([id, v]) => ({ id, ...v }))
     .sort((a, b) => b.investimento - a.investimento);
+}
+
+/** Rótulos por dia da semana e mês, derivados dos dados diários já sincronizados. */
+export const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+export const MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+export function porDiaDaSemana(
+  linhas: LinhaCampanha[],
+): { rotulo: string; investimento: number; cliques: number; impressoes: number }[] {
+  const somas = DIAS_SEMANA.map(() => ({ investimento: 0, cliques: 0, impressoes: 0 }));
+  for (const linha of linhas) {
+    const dia = new Date(`${linha.data}T12:00:00`).getDay();
+    somas[dia].investimento += linha.investimento;
+    somas[dia].cliques += linha.cliques;
+    somas[dia].impressoes += linha.impressoes;
+  }
+  return DIAS_SEMANA.map((rotulo, i) => ({ rotulo, ...somas[i] }));
+}
+
+export function porMes(
+  linhas: LinhaCampanha[],
+): { rotulo: string; investimento: number; cliques: number; impressoes: number }[] {
+  const mapa = new Map<string, { investimento: number; cliques: number; impressoes: number }>();
+  for (const linha of linhas) {
+    const chave = linha.data.slice(0, 7);
+    const atual = mapa.get(chave) ?? { investimento: 0, cliques: 0, impressoes: 0 };
+    atual.investimento += linha.investimento;
+    atual.cliques += linha.cliques;
+    atual.impressoes += linha.impressoes;
+    mapa.set(chave, atual);
+  }
+  return [...mapa.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([chave, v]) => {
+      const [, mesStr] = chave.split("-");
+      const mes = Number(mesStr) - 1;
+      return { rotulo: MESES[mes] ?? chave, ...v };
+    });
 }

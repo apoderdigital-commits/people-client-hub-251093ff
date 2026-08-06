@@ -3,6 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { Check, ChevronDown, ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -27,6 +29,8 @@ import {
   lerMetricasConfig,
   porCampanha,
   porDia,
+  porDiaDaSemana,
+  porMes,
   totais,
   variacao,
   METRICAS,
@@ -61,7 +65,9 @@ const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" 
 const num = new Intl.NumberFormat("pt-BR");
 
 const COLUNAS =
-  "campanha_id, campanha_nome, status, data, investimento, impressoes, cliques, leads, conversoes, acoes";
+  "campanha_id, campanha_nome, status, data, investimento, impressoes, cliques, leads, conversoes, acoes, " +
+  "video_p25, video_p50, video_p75, video_p95, video_p100, alcance, cliques_unicos, cliques_link, " +
+  "cliques_link_unicos, cliques_saida, video_thruplay, video_15s, video_continuo_2s, video_tempo_medio, reconhecimento_est";
 
 /** types.ts é gerado pelo Lovable e ainda não conhece as tabelas novas. */
 const db = supabase as unknown as SupabaseClient;
@@ -73,9 +79,10 @@ type Config = {
   acao_conversao: string | null;
 };
 
-function formatar(valor: number, formato: "brl" | "num" | "pct"): string {
+function formatar(valor: number, formato: "brl" | "num" | "pct" | "dec"): string {
   if (formato === "brl") return brl.format(valor);
   if (formato === "pct") return `${valor.toFixed(2)}%`;
+  if (formato === "dec") return valor.toFixed(2);
   return num.format(valor);
 }
 
@@ -423,6 +430,8 @@ function Painel({ perfil }: { perfil: Perfil }) {
             </div>
           </section>
 
+          <SegmentacaoDashboard clienteId={clienteId} linhas={linhas} />
+
           <p className="mt-4 text-xs text-ink-muted">
             Período: {diaCurto(janela.desde)} a {diaCurto(janela.ate)}.
             {periodo === "7d" || periodo === "30d"
@@ -432,6 +441,140 @@ function Painel({ perfil }: { perfil: Perfil }) {
         </>
       )}
     </>
+  );
+}
+
+type Segmento = { valor: string; investimento: number; impressoes: number; cliques: number; leads: number };
+type SegmentacaoDb = Segmento & { data: string };
+
+const DIMENSOES_SEGMENTACAO: { id: string; label: string; fonteBanco: boolean }[] = [
+  { id: "dia_semana", label: "Dia da semana", fonteBanco: false },
+  { id: "mes", label: "Mês", fonteBanco: false },
+  { id: "idade", label: "Idade", fonteBanco: true },
+  { id: "genero", label: "Gênero", fonteBanco: true },
+  { id: "plataforma", label: "Plataforma", fonteBanco: true },
+  { id: "posicionamento", label: "Posicionamento", fonteBanco: true },
+  { id: "dispositivo", label: "Dispositivo", fonteBanco: true },
+  { id: "regiao", label: "Região", fonteBanco: true },
+  { id: "hora", label: "Hora do dia", fonteBanco: true },
+];
+
+/**
+ * Dia da semana e mês vêm dos dados diários já sincronizados (sem chamada
+ * nova à Meta). As demais dimensões dependem de `metricas_campanhas_segmentadas`,
+ * gravada só na sincronização manual — mostra o snapshot mais recente.
+ */
+function SegmentacaoDashboard({ clienteId, linhas }: { clienteId: string; linhas: LinhaCampanha[] }) {
+  const [dimensao, setDimensao] = useState("dia_semana");
+  const [segmentado, setSegmentado] = useState<Segmento[]>([]);
+  const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => {
+    const atual = DIMENSOES_SEGMENTACAO.find((d) => d.id === dimensao);
+    if (!atual?.fonteBanco) return;
+    let ativo = true;
+    setCarregando(true);
+    db.from("metricas_campanhas_segmentadas")
+      .select("valor, investimento, impressoes, cliques, leads, data")
+      .eq("cliente_id", clienteId)
+      .eq("dimensao", dimensao)
+      .order("data", { ascending: false })
+      .then(({ data }) => {
+        if (!ativo) return;
+        const linhasDb = (data as SegmentacaoDb[]) ?? [];
+        const maisRecente = linhasDb[0]?.data;
+        const filtradas = linhasDb.filter((l) => l.data === maisRecente);
+        setSegmentado(
+          filtradas.map((l) => ({
+            valor: l.valor,
+            investimento: l.investimento,
+            impressoes: l.impressoes,
+            cliques: l.cliques,
+            leads: l.leads,
+          })),
+        );
+        setCarregando(false);
+      });
+    return () => {
+      ativo = false;
+    };
+  }, [clienteId, dimensao]);
+
+  const dados = useMemo(() => {
+    if (dimensao === "dia_semana") {
+      return porDiaDaSemana(linhas).map((d) => ({ valor: d.rotulo, investimento: Math.round(d.investimento) }));
+    }
+    if (dimensao === "mes") {
+      return porMes(linhas).map((d) => ({ valor: d.rotulo, investimento: Math.round(d.investimento) }));
+    }
+    return segmentado
+      .map((s) => ({ valor: s.valor, investimento: Math.round(s.investimento) }))
+      .sort((a, b) => b.investimento - a.investimento)
+      .slice(0, 12);
+  }, [dimensao, linhas, segmentado]);
+
+  const semDados = dimensao !== "dia_semana" && dimensao !== "mes" && segmentado.length === 0;
+
+  return (
+    <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+      <h2 className="text-base font-bold text-ink">Segmentações</h2>
+      <p className="text-sm text-ink-muted">Investimento por segmento no período.</p>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {DIMENSOES_SEGMENTACAO.map((d) => (
+          <button
+            key={d.id}
+            type="button"
+            onClick={() => setDimensao(d.id)}
+            className={
+              dimensao === d.id
+                ? "rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground"
+                : "rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink"
+            }
+          >
+            {d.label}
+          </button>
+        ))}
+      </div>
+
+      {carregando ? (
+        <div className="mt-6 grid place-items-center py-8">
+          <Loader2 className="size-5 animate-spin text-brand" />
+        </div>
+      ) : semDados ? (
+        <p className="mt-4 rounded-xl border border-border bg-background px-4 py-6 text-center text-sm text-ink-muted">
+          Sem dados dessa segmentação ainda — use Sincronizar (ela roda junto com a Meta Ads).
+        </p>
+      ) : (
+        <div className="mt-4 h-72 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dados} margin={{ top: 8, right: 8, bottom: 24, left: -12 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+              <XAxis
+                dataKey="valor"
+                tick={{ fontSize: 11, fill: "var(--color-ink-muted)" }}
+                stroke="var(--color-border)"
+                interval={0}
+                angle={-20}
+                textAnchor="end"
+                height={50}
+              />
+              <YAxis tick={{ fontSize: 12, fill: "var(--color-ink-muted)" }} stroke="var(--color-border)" />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: 12,
+                  border: "1px solid var(--color-border)",
+                  background: "var(--color-card)",
+                  color: "var(--color-ink)",
+                  fontSize: 12,
+                }}
+              />
+              <Bar dataKey="investimento" name="Investimento (R$)" fill="var(--color-brand)" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </section>
   );
 }
 
