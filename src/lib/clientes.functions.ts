@@ -313,8 +313,9 @@ async function sincronizarInstagram(
   const seguidoresPorDia = new Map<string, number>();
   let acumulado = conta.seguidores;
   for (let i = dias.length - 1; i >= 0; i--) {
-    seguidoresPorDia.set(dias[i], acumulado);
-    acumulado -= insights.deltasSeguidores[dias[i]] ?? 0;
+    const dia = dias[i]!;
+    seguidoresPorDia.set(dia, acumulado);
+    acumulado -= insights.deltasSeguidores[dia] ?? 0;
   }
 
   const engajamentoPorDia = new Map<

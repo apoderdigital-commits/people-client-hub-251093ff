@@ -69,7 +69,7 @@ export const CORES_ETIQUETA: Record<string, string> = {
 export const CORES_DISPONIVEIS = ["pink", "violet", "indigo", "teal", "amber"] as const;
 
 export function classeDaCor(cor: string): string {
-  return CORES_ETIQUETA[cor] ?? CORES_ETIQUETA.amber;
+  return CORES_ETIQUETA[cor] ?? "bg-card-amber";
 }
 
 export const PRIORIDADES = ["Baixa", "Média", "Alta", "Urgente"] as const;
@@ -96,8 +96,8 @@ export function iniciais(texto: string): string {
   const limpo = texto.trim();
   if (!limpo) return "?";
   const partes = limpo.split(/\s+/);
-  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
-  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+  if (partes.length === 1) return partes[0]!.slice(0, 2).toUpperCase();
+  return (partes[0]![0]! + partes[partes.length - 1]![0]!).toUpperCase();
 }
 
 export function hojeISO(): string {

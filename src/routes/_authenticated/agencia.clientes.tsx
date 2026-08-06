@@ -624,7 +624,7 @@ function ConfigMetricas({
       const j = i + direcao;
       if (i < 0 || j < 0 || j >= atual.length) return atual;
       const nova = [...atual];
-      [nova[i], nova[j]] = [nova[j], nova[i]];
+      [nova[i], nova[j]] = [nova[j]!, nova[i]!];
       return nova;
     });
     setOk(false);
@@ -844,7 +844,7 @@ function ConfigMetricasInstagram({
       const j = i + direcao;
       if (i < 0 || j < 0 || j >= atual.length) return atual;
       const nova = [...atual];
-      [nova[i], nova[j]] = [nova[j], nova[i]];
+      [nova[i], nova[j]] = [nova[j]!, nova[i]!];
       return nova;
     });
     setOk(false);

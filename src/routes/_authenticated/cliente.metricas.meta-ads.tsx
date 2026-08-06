@@ -328,7 +328,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
                   rotulo={meta.label}
                   valor={formatar(atual[id], meta.formato)}
                   variacao={variacao(atual[id], anterior[id])}
-                  inverso={meta.inverso}
+                  inverso={meta.inverso ?? false}
                 />
               );
             })}
