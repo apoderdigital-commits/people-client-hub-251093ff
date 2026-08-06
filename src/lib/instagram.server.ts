@@ -94,21 +94,55 @@ export type InsightContaDiario = {
   cliquesRota: number;
 };
 
-/** Uma métrica `total_value` isolada — falha aqui nunca derruba as demais. */
-async function buscarTotalValue(igUserId: string, token: string, metrica: string, desde: string, ate: string): Promise<number> {
-  try {
-    const url = new URL(`${BASE}/${igUserId}/insights`);
-    url.searchParams.set("metric", metrica);
-    url.searchParams.set("period", "day");
-    url.searchParams.set("metric_type", "total_value");
-    url.searchParams.set("since", desde);
-    url.searchParams.set("until", ate);
-    url.searchParams.set("access_token", token);
-    const corpo = await pedir<{ data?: { total_value?: { value?: number } }[] }>(url.toString());
-    return corpo.data?.[0]?.total_value?.value ?? 0;
-  } catch {
-    return 0;
+/**
+ * A Insights API da Meta recusa qualquer consulta com `period=day` cobrindo
+ * mais de 30 dias entre `since` e `until` (erro #100). Períodos personalizados
+ * mais longos precisam ser quebrados em pedaços de até 30 dias corridos —
+ * essa função faz essa divisão pra qualquer chamada que use `since`/`until`.
+ */
+function dividirEmJanelas(desde: string, ate: string, maxDiasPorJanela = 30): { desde: string; ate: string }[] {
+  const janelas: { desde: string; ate: string }[] = [];
+  let inicio = new Date(`${desde}T00:00:00Z`);
+  const fim = new Date(`${ate}T00:00:00Z`);
+
+  while (inicio <= fim) {
+    const fimJanela = new Date(inicio);
+    fimJanela.setUTCDate(fimJanela.getUTCDate() + maxDiasPorJanela - 1);
+    const fimReal = fimJanela > fim ? fim : fimJanela;
+    janelas.push({
+      desde: inicio.toISOString().slice(0, 10),
+      ate: fimReal.toISOString().slice(0, 10),
+    });
+    inicio = new Date(fimReal);
+    inicio.setUTCDate(inicio.getUTCDate() + 1);
   }
+
+  return janelas.length > 0 ? janelas : [{ desde, ate }];
+}
+
+/**
+ * Uma métrica `total_value` isolada — falha aqui nunca derruba as demais.
+ * Períodos longos são somados pedaço por pedaço (ver `dividirEmJanelas`).
+ */
+async function buscarTotalValue(igUserId: string, token: string, metrica: string, desde: string, ate: string): Promise<number> {
+  const janelas = dividirEmJanelas(desde, ate);
+  let total = 0;
+  for (const janela of janelas) {
+    try {
+      const url = new URL(`${BASE}/${igUserId}/insights`);
+      url.searchParams.set("metric", metrica);
+      url.searchParams.set("period", "day");
+      url.searchParams.set("metric_type", "total_value");
+      url.searchParams.set("since", janela.desde);
+      url.searchParams.set("until", janela.ate);
+      url.searchParams.set("access_token", token);
+      const corpo = await pedir<{ data?: { total_value?: { value?: number } }[] }>(url.toString());
+      total += corpo.data?.[0]?.total_value?.value ?? 0;
+    } catch {
+      // best-effort — o pedaço que falhar só não soma, os outros continuam.
+    }
+  }
+  return total;
 }
 
 /**
@@ -128,23 +162,25 @@ export async function buscarInsightsConta(
   desde: string,
   ate: string,
 ): Promise<{ diarios: InsightContaDiario[]; deltasSeguidores: Record<string, number> }> {
-  const url = new URL(`${BASE}/${igUserId}/insights`);
-  url.searchParams.set("metric", "reach,follower_count");
-  url.searchParams.set("period", "day");
-  url.searchParams.set("metric_type", "time_series");
-  url.searchParams.set("since", desde);
-  url.searchParams.set("until", ate);
-  url.searchParams.set("access_token", token);
-
-  const corpo = await pedir<{ data?: InsightMetrico[] }>(url.toString());
-
   const porMetrica = new Map<string, Map<string, number>>();
-  for (const metrica of corpo.data ?? []) {
-    const porDia = new Map<string, number>();
-    for (const v of metrica.values ?? []) {
-      porDia.set(v.end_time.slice(0, 10), v.value ?? 0);
+
+  for (const janela of dividirEmJanelas(desde, ate)) {
+    const url = new URL(`${BASE}/${igUserId}/insights`);
+    url.searchParams.set("metric", "reach,follower_count");
+    url.searchParams.set("period", "day");
+    url.searchParams.set("metric_type", "time_series");
+    url.searchParams.set("since", janela.desde);
+    url.searchParams.set("until", janela.ate);
+    url.searchParams.set("access_token", token);
+
+    const corpo = await pedir<{ data?: InsightMetrico[] }>(url.toString());
+    for (const metrica of corpo.data ?? []) {
+      const porDia = porMetrica.get(metrica.name) ?? new Map<string, number>();
+      for (const v of metrica.values ?? []) {
+        porDia.set(v.end_time.slice(0, 10), v.value ?? 0);
+      }
+      porMetrica.set(metrica.name, porDia);
     }
-    porMetrica.set(metrica.name, porDia);
   }
 
   const alcancePorDia = porMetrica.get("reach") ?? new Map<string, number>();
