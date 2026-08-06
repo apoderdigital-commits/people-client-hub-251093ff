@@ -9,7 +9,13 @@ export type MetricaInstagramId =
   | "visitas_perfil"
   | "curtidas"
   | "comentarios"
-  | "engajamento";
+  | "engajamento"
+  | "contas_engajadas"
+  | "visualizacoes"
+  | "cliques_site"
+  | "cliques_ligar"
+  | "cliques_email"
+  | "cliques_rota";
 
 export const METRICAS_INSTAGRAM: {
   id: MetricaInstagramId;
@@ -17,22 +23,33 @@ export const METRICAS_INSTAGRAM: {
   formato: "num" | "pct";
 }[] = [
   { id: "seguidores", label: "Seguidores", formato: "num" },
-  { id: "alcance", label: "Alcance", formato: "num" },
+  { id: "alcance", label: "Alcance (contas alcançadas)", formato: "num" },
+  { id: "contas_engajadas", label: "Contas engajadas", formato: "num" },
+  { id: "visualizacoes", label: "Visualizações totais", formato: "num" },
   { id: "visitas_perfil", label: "Visitas ao Perfil", formato: "num" },
+  { id: "cliques_site", label: "Cliques no site", formato: "num" },
+  { id: "cliques_ligar", label: "Cliques para ligar", formato: "num" },
+  { id: "cliques_email", label: "Cliques para e-mail", formato: "num" },
+  { id: "cliques_rota", label: "Cliques para rota", formato: "num" },
   { id: "curtidas", label: "Curtidas", formato: "num" },
   { id: "comentarios", label: "Comentários", formato: "num" },
   { id: "engajamento", label: "Taxa de Engajamento", formato: "pct" },
 ];
 
-export const METRICAS_INSTAGRAM_PADRAO: MetricaInstagramId[] = METRICAS_INSTAGRAM.map(
-  (m) => m.id,
-);
+export const METRICAS_INSTAGRAM_PADRAO: MetricaInstagramId[] = [
+  "seguidores",
+  "alcance",
+  "visitas_perfil",
+  "curtidas",
+  "comentarios",
+  "engajamento",
+];
 
 export function ehMetricaInstagramValida(valor: unknown): valor is MetricaInstagramId {
   return typeof valor === "string" && METRICAS_INSTAGRAM.some((m) => m.id === valor);
 }
 
-/** Normaliza o que veio do banco, caindo no padrão (todas) quando estiver vazio. */
+/** Normaliza o que veio do banco, caindo no padrão quando estiver vazio. */
 export function lerMetricasInstagramConfig(valor: unknown): MetricaInstagramId[] {
   if (!Array.isArray(valor)) return METRICAS_INSTAGRAM_PADRAO;
   const ids = valor.filter(ehMetricaInstagramValida);

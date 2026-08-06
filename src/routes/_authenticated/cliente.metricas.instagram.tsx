@@ -3,6 +3,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -60,6 +62,12 @@ type LinhaInstagram = {
   curtidas: number;
   comentarios: number;
   compartilhamentos: number;
+  contas_engajadas: number;
+  visualizacoes: number;
+  cliques_site: number;
+  cliques_ligar: number;
+  cliques_email: number;
+  cliques_rota: number;
 };
 
 type Publicacao = {
@@ -70,6 +78,10 @@ type Publicacao = {
   alcance: number;
   curtidas: number;
   comentarios: number;
+  salvamentos: number;
+  interacoes_totais: number;
+  reproducoes: number;
+  tempo_medio_exibicao: number;
 };
 
 /** types.ts é gerado pelo Lovable e ainda não conhece estas tabelas. */
@@ -161,14 +173,19 @@ function Painel({ perfil }: { perfil: Perfil }) {
     const [metricas, posts, cliente] = await Promise.all([
       db
         .from("metricas_instagram_diarias")
-        .select("data, seguidores, alcance, visitas_perfil, curtidas, comentarios, compartilhamentos")
+        .select(
+          "data, seguidores, alcance, visitas_perfil, curtidas, comentarios, compartilhamentos, " +
+            "contas_engajadas, visualizacoes, cliques_site, cliques_ligar, cliques_email, cliques_rota",
+        )
         .eq("cliente_id", clienteId)
         .gte("data", janelaAnt.desde)
         .lte("data", janela.ate)
         .order("data"),
       db
         .from("metricas_instagram_posts")
-        .select("media_id, tipo, legenda, publicado_em, alcance, curtidas, comentarios")
+        .select(
+          "media_id, tipo, legenda, publicado_em, alcance, curtidas, comentarios, salvamentos, interacoes_totais, reproducoes, tempo_medio_exibicao",
+        )
         .eq("cliente_id", clienteId)
         .order("publicado_em", { ascending: false })
         .limit(8),
@@ -219,7 +236,18 @@ function Painel({ perfil }: { perfil: Perfil }) {
 
     const somar = (
       ls: LinhaInstagram[],
-      chave: "alcance" | "visitas_perfil" | "curtidas" | "comentarios" | "compartilhamentos",
+      chave:
+        | "alcance"
+        | "visitas_perfil"
+        | "curtidas"
+        | "comentarios"
+        | "compartilhamentos"
+        | "contas_engajadas"
+        | "visualizacoes"
+        | "cliques_site"
+        | "cliques_ligar"
+        | "cliques_email"
+        | "cliques_rota",
     ) => ls.reduce((acc, d) => acc + d[chave], 0);
 
     const seguidoresAtual = daJanela.at(-1)?.seguidores ?? 0;
@@ -227,13 +255,10 @@ function Painel({ perfil }: { perfil: Perfil }) {
     const seguidoresAnteriorFim = daAnterior.at(-1)?.seguidores ?? seguidoresInicio;
 
     const alcance = somar(daJanela, "alcance");
-    const visitasPerfil = somar(daJanela, "visitas_perfil");
     const curtidas = somar(daJanela, "curtidas");
     const comentarios = somar(daJanela, "comentarios");
     const compartilhamentos = somar(daJanela, "compartilhamentos");
-
     const alcanceAnterior = somar(daAnterior, "alcance");
-    const visitasAnterior = somar(daAnterior, "visitas_perfil");
     const curtidasAnterior = somar(daAnterior, "curtidas");
     const comentariosAnterior = somar(daAnterior, "comentarios");
     const compartilhamentosAnterior = somar(daAnterior, "compartilhamentos");
@@ -250,18 +275,30 @@ function Painel({ perfil }: { perfil: Perfil }) {
       atual: {
         seguidores: seguidoresAtual,
         alcance,
-        visitas_perfil: visitasPerfil,
+        visitas_perfil: somar(daJanela, "visitas_perfil"),
         curtidas,
         comentarios,
         engajamento,
+        contas_engajadas: somar(daJanela, "contas_engajadas"),
+        visualizacoes: somar(daJanela, "visualizacoes"),
+        cliques_site: somar(daJanela, "cliques_site"),
+        cliques_ligar: somar(daJanela, "cliques_ligar"),
+        cliques_email: somar(daJanela, "cliques_email"),
+        cliques_rota: somar(daJanela, "cliques_rota"),
       } as Record<MetricaInstagramId, number>,
       anterior: {
         seguidores: seguidoresAnteriorFim,
         alcance: alcanceAnterior,
-        visitas_perfil: visitasAnterior,
+        visitas_perfil: somar(daAnterior, "visitas_perfil"),
         curtidas: curtidasAnterior,
         comentarios: comentariosAnterior,
         engajamento: engajamentoAnterior,
+        contas_engajadas: somar(daAnterior, "contas_engajadas"),
+        visualizacoes: somar(daAnterior, "visualizacoes"),
+        cliques_site: somar(daAnterior, "cliques_site"),
+        cliques_ligar: somar(daAnterior, "cliques_ligar"),
+        cliques_email: somar(daAnterior, "cliques_email"),
+        cliques_rota: somar(daAnterior, "cliques_rota"),
       } as Record<MetricaInstagramId, number>,
       grafico: daJanela.map((d) => ({
         data: diaCurto(d.data),
@@ -409,7 +446,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
               <p className="mt-3 text-sm text-ink-muted">Nenhuma publicação sincronizada ainda.</p>
             ) : (
               <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[560px] text-left text-sm">
+                <table className="w-full min-w-[720px] text-left text-sm">
                   <thead>
                     <tr className="text-xs uppercase tracking-wide text-ink-muted">
                       <th className="pb-2 font-medium">Legenda</th>
@@ -418,12 +455,15 @@ function Painel({ perfil }: { perfil: Perfil }) {
                       <th className="pb-2 font-medium">Alcance</th>
                       <th className="pb-2 font-medium">Curtidas</th>
                       <th className="pb-2 font-medium">Comentários</th>
+                      <th className="pb-2 font-medium">Salvamentos</th>
+                      <th className="pb-2 font-medium">Interações</th>
+                      <th className="pb-2 font-medium">Reproduções</th>
                     </tr>
                   </thead>
                   <tbody>
                     {publicacoes.map((p) => (
                       <tr key={p.media_id} className="border-t border-border">
-                        <td className="max-w-[240px] truncate py-3 font-medium text-ink">
+                        <td className="max-w-[200px] truncate py-3 font-medium text-ink">
                           {p.legenda || "—"}
                         </td>
                         <td className="py-3">
@@ -435,6 +475,11 @@ function Painel({ perfil }: { perfil: Perfil }) {
                         <td className="py-3 text-ink">{num.format(p.alcance)}</td>
                         <td className="py-3 text-ink">{num.format(p.curtidas)}</td>
                         <td className="py-3 text-ink">{num.format(p.comentarios)}</td>
+                        <td className="py-3 text-ink">{num.format(p.salvamentos)}</td>
+                        <td className="py-3 text-ink">{num.format(p.interacoes_totais)}</td>
+                        <td className="py-3 text-ink">
+                          {p.tipo === "Reels" ? num.format(p.reproducoes) : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -442,8 +487,154 @@ function Painel({ perfil }: { perfil: Perfil }) {
               </div>
             )}
           </section>
+
+          <AudienciaInstagram clienteId={clienteId} />
         </>
       )}
+    </>
+  );
+}
+
+type ValorDemografia = { valor: string; quantidade: number };
+type Demografia = { genero: ValorDemografia[]; idade: ValorDemografia[]; cidade: ValorDemografia[]; pais: ValorDemografia[] };
+
+const ABAS_DEMOGRAFIA: { id: keyof Demografia; label: string }[] = [
+  { id: "genero", label: "Gênero" },
+  { id: "idade", label: "Faixa etária" },
+  { id: "cidade", label: "Cidades" },
+  { id: "pais", label: "Países" },
+];
+
+/**
+ * Demografia e horários ativos: dados de melhor esforço, gravados só na
+ * sincronização manual (a API muda com frequência nessa parte e nem toda
+ * conta libera o dado) — se estiver vazio, é porque a Meta não devolveu nada
+ * ainda pra essa conta, não um erro.
+ */
+function AudienciaInstagram({ clienteId }: { clienteId: string }) {
+  const [aba, setAba] = useState<keyof Demografia>("genero");
+  const [demografia, setDemografia] = useState<Demografia>({ genero: [], idade: [], cidade: [], pais: [] });
+  const [horarios, setHorarios] = useState<{ hora: number; quantidade: number }[]>([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    let ativo = true;
+    Promise.all([
+      db.from("metricas_instagram_demografia").select("dimensao, valor, quantidade").eq("cliente_id", clienteId),
+      db.from("metricas_instagram_horarios").select("hora, quantidade").eq("cliente_id", clienteId).order("hora"),
+    ]).then(([demoRes, horaRes]) => {
+      if (!ativo) return;
+      const agrupado: Demografia = { genero: [], idade: [], cidade: [], pais: [] };
+      for (const linha of (demoRes.data as { dimensao: string; valor: string; quantidade: number }[]) ?? []) {
+        if (linha.dimensao in agrupado) {
+          agrupado[linha.dimensao as keyof Demografia].push({ valor: linha.valor, quantidade: linha.quantidade });
+        }
+      }
+      for (const chave of Object.keys(agrupado) as (keyof Demografia)[]) {
+        agrupado[chave].sort((a, b) => b.quantidade - a.quantidade);
+      }
+      setDemografia(agrupado);
+      setHorarios((horaRes.data as { hora: number; quantidade: number }[]) ?? []);
+      setCarregando(false);
+    });
+    return () => {
+      ativo = false;
+    };
+  }, [clienteId]);
+
+  const dadosAba = demografia[aba].slice(0, 10);
+  const dadosHorarios = horarios.map((h) => ({ hora: `${String(h.hora).padStart(2, "0")}h`, quantidade: h.quantidade }));
+
+  if (carregando) {
+    return (
+      <div className="mt-6 grid place-items-center py-6">
+        <Loader2 className="size-5 animate-spin text-brand" />
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+        <h2 className="text-base font-bold text-ink">Demografia da audiência</h2>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {ABAS_DEMOGRAFIA.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => setAba(a.id)}
+              className={
+                aba === a.id
+                  ? "rounded-full bg-brand px-3 py-1.5 text-xs font-semibold text-brand-foreground"
+                  : "rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink"
+              }
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
+        {dadosAba.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-border bg-background px-4 py-6 text-center text-sm text-ink-muted">
+            Sem dados de demografia ainda — use Sincronizar (nem toda conta tem esse dado liberado pela Meta).
+          </p>
+        ) : (
+          <div className="mt-4 h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dadosAba} layout="vertical" margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis type="number" tick={{ fontSize: 12, fill: "var(--color-ink-muted)" }} stroke="var(--color-border)" />
+                <YAxis
+                  type="category"
+                  dataKey="valor"
+                  width={90}
+                  tick={{ fontSize: 11, fill: "var(--color-ink-muted)" }}
+                  stroke="var(--color-border)"
+                />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid var(--color-border)",
+                    background: "var(--color-card)",
+                    color: "var(--color-ink)",
+                    fontSize: 12,
+                  }}
+                />
+                <Bar dataKey="quantidade" name="Seguidores" fill="var(--color-card-pink)" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+        <h2 className="text-base font-bold text-ink">Horários mais ativos dos seguidores</h2>
+        <p className="text-sm text-ink-muted">Melhores horários pra postar, por hora do dia.</p>
+        {dadosHorarios.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-border bg-background px-4 py-6 text-center text-sm text-ink-muted">
+            Sem esse dado ainda — use Sincronizar.
+          </p>
+        ) : (
+          <div className="mt-4 h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={dadosHorarios} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                <XAxis dataKey="hora" tick={{ fontSize: 11, fill: "var(--color-ink-muted)" }} stroke="var(--color-border)" />
+                <YAxis tick={{ fontSize: 12, fill: "var(--color-ink-muted)" }} stroke="var(--color-border)" />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: "1px solid var(--color-border)",
+                    background: "var(--color-card)",
+                    color: "var(--color-ink)",
+                    fontSize: 12,
+                  }}
+                />
+                <Bar dataKey="quantidade" name="Seguidores online" fill="var(--color-card-violet)" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
     </>
   );
 }

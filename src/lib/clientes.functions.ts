@@ -394,6 +394,12 @@ async function sincronizarInstagram(
       seguidores: seguidoresPorDia.get(d.data) ?? conta.seguidores,
       alcance: d.alcance,
       visitas_perfil: d.visitasPerfil,
+      contas_engajadas: d.contasEngajadas,
+      visualizacoes: d.visualizacoes,
+      cliques_site: d.cliquesSite,
+      cliques_ligar: d.cliquesLigar,
+      cliques_email: d.cliquesEmail,
+      cliques_rota: d.cliquesRota,
       curtidas: eng.curtidas,
       comentarios: eng.comentarios,
       compartilhamentos: eng.compartilhamentos,
@@ -421,6 +427,10 @@ async function sincronizarInstagram(
     curtidas: p.curtidas,
     comentarios: p.comentarios,
     compartilhamentos: p.compartilhamentos,
+    salvamentos: p.salvamentos,
+    interacoes_totais: p.interacoesTotais,
+    reproducoes: p.reproducoes,
+    tempo_medio_exibicao: p.tempoMedioExibicao,
     atualizado_em: new Date().toISOString(),
   }));
 
@@ -429,6 +439,36 @@ async function sincronizarInstagram(
       .from("metricas_instagram_posts")
       .upsert(linhasPosts, { onConflict: "cliente_id,media_id" });
     if (error) throw new Error(erroDoBanco(error, "Publicações obtidas, mas não foi possível gravá-las."));
+  }
+
+  // Demografia e horários ativos: melhor esforço, não fazem parte do sync
+  // principal — uma falha aqui não pode impedir o resto de ser gravado.
+  try {
+    const demografia = await instagram.buscarDemografia(igId, token);
+    const linhasDemografia = [
+      ...demografia.genero.map((d) => ({ dimensao: "genero", valor: d.valor, quantidade: d.quantidade })),
+      ...demografia.idade.map((d) => ({ dimensao: "idade", valor: d.valor, quantidade: d.quantidade })),
+      ...demografia.cidade.map((d) => ({ dimensao: "cidade", valor: d.valor, quantidade: d.quantidade })),
+      ...demografia.pais.map((d) => ({ dimensao: "pais", valor: d.valor, quantidade: d.quantidade })),
+    ].map((d) => ({ cliente_id: clienteId, ...d, atualizado_em: new Date().toISOString() }));
+    if (linhasDemografia.length > 0) {
+      await db
+        .from("metricas_instagram_demografia")
+        .upsert(linhasDemografia, { onConflict: "cliente_id,dimensao,valor" });
+    }
+
+    const horarios = await instagram.buscarHorariosAtivos(igId, token);
+    const linhasHorarios = Object.entries(horarios).map(([hora, quantidade]) => ({
+      cliente_id: clienteId,
+      hora: Number(hora),
+      quantidade,
+      atualizado_em: new Date().toISOString(),
+    }));
+    if (linhasHorarios.length > 0) {
+      await db.from("metricas_instagram_horarios").upsert(linhasHorarios, { onConflict: "cliente_id,hora" });
+    }
+  } catch {
+    // best-effort, ver comentário acima.
   }
 
   await db

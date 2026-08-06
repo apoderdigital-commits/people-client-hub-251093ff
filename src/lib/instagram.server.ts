@@ -82,13 +82,45 @@ export async function validarCredenciais(igUserId: string, token: string): Promi
 type ValorDiario = { end_time: string; value: number };
 type InsightMetrico = { name: string; values: ValorDiario[] };
 
-export type InsightContaDiario = { data: string; alcance: number; visitasPerfil: number };
+export type InsightContaDiario = {
+  data: string;
+  alcance: number;
+  visitasPerfil: number;
+  contasEngajadas: number;
+  visualizacoes: number;
+  cliquesSite: number;
+  cliquesLigar: number;
+  cliquesEmail: number;
+  cliquesRota: number;
+};
+
+/** Uma métrica `total_value` isolada — falha aqui nunca derruba as demais. */
+async function buscarTotalValue(igUserId: string, token: string, metrica: string, desde: string, ate: string): Promise<number> {
+  try {
+    const url = new URL(`${BASE}/${igUserId}/insights`);
+    url.searchParams.set("metric", metrica);
+    url.searchParams.set("period", "day");
+    url.searchParams.set("metric_type", "total_value");
+    url.searchParams.set("since", desde);
+    url.searchParams.set("until", ate);
+    url.searchParams.set("access_token", token);
+    const corpo = await pedir<{ data?: { total_value?: { value?: number } }[] }>(url.toString());
+    return corpo.data?.[0]?.total_value?.value ?? 0;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Alcance e Visitas ao Perfil já vêm como valores absolutos do próprio dia.
  * `follower_count` é diferente: cada valor é a variação líquida de seguidores
  * naquele dia, não o total — por isso volta à parte, para ser reconstruído em
  * um total diário por quem chama (a partir do total atual da conta).
+ *
+ * `profile_views` e o conjunto de cliques de contato (site/ligar/e-mail/rota)
+ * só aceitam `total_value` (um número pro período inteiro, não série diária)
+ * — cada bloco é buscado isolado, então uma métrica que a conta não tenha
+ * disponível não derruba as outras.
  */
 export async function buscarInsightsConta(
   igUserId: string,
@@ -121,38 +153,100 @@ export async function buscarInsightsConta(
   const dias = new Set<string>([...alcancePorDia.keys(), ...Object.keys(deltasSeguidores)]);
   if (dias.size === 0) dias.add(ate);
 
-  /**
-   * `profile_views` não aceita mais série diária (metric_type=time_series) —
-   * só devolve um total agregado do período inteiro (total_value). Sem
-   * quebra por dia, o total é gravado no último dia da janela; os cards de
-   * KPI somam o período inteiro mesmo, então o total bate certo lá.
-   */
-  let visitasTotal = 0;
-  try {
-    const urlTotal = new URL(`${BASE}/${igUserId}/insights`);
-    urlTotal.searchParams.set("metric", "profile_views");
-    urlTotal.searchParams.set("period", "day");
-    urlTotal.searchParams.set("metric_type", "total_value");
-    urlTotal.searchParams.set("since", desde);
-    urlTotal.searchParams.set("until", ate);
-    urlTotal.searchParams.set("access_token", token);
-    const corpoTotal = await pedir<{ data?: { total_value?: { value?: number } }[] }>(
-      urlTotal.toString(),
-    );
-    visitasTotal = corpoTotal.data?.[0]?.total_value?.value ?? 0;
-  } catch {
-    visitasTotal = 0;
-  }
+  const [visitasTotal, contasEngajadas, visualizacoes, cliquesSite, cliquesLigar, cliquesEmail, cliquesRota] =
+    await Promise.all([
+      buscarTotalValue(igUserId, token, "profile_views", desde, ate),
+      buscarTotalValue(igUserId, token, "accounts_engaged", desde, ate),
+      buscarTotalValue(igUserId, token, "views", desde, ate),
+      buscarTotalValue(igUserId, token, "website_clicks", desde, ate),
+      buscarTotalValue(igUserId, token, "call_clicks", desde, ate),
+      buscarTotalValue(igUserId, token, "email_contacts", desde, ate),
+      buscarTotalValue(igUserId, token, "get_directions_clicks", desde, ate),
+    ]);
 
   const ultimoDia = [...dias].sort().at(-1) ?? ate;
 
   const diarios = [...dias].sort().map((data) => ({
     data,
     alcance: alcancePorDia.get(data) ?? 0,
+    // Métricas total_value só existem pro período inteiro, não por dia — o
+    // total fica no último dia da janela; os cards de KPI somam o período
+    // inteiro mesmo, então o total bate certo lá.
     visitasPerfil: data === ultimoDia ? visitasTotal : 0,
+    contasEngajadas: data === ultimoDia ? contasEngajadas : 0,
+    visualizacoes: data === ultimoDia ? visualizacoes : 0,
+    cliquesSite: data === ultimoDia ? cliquesSite : 0,
+    cliquesLigar: data === ultimoDia ? cliquesLigar : 0,
+    cliquesEmail: data === ultimoDia ? cliquesEmail : 0,
+    cliquesRota: data === ultimoDia ? cliquesRota : 0,
   }));
 
   return { diarios, deltasSeguidores };
+}
+
+export type ValorDemografia = { valor: string; quantidade: number };
+
+/**
+ * Demografia da audiência (gênero, idade, cidade, país). Best-effort de
+ * propósito: essa parte da API muda com frequência e uma conta pode não ter
+ * seguidores suficientes pra Meta liberar o dado — cada dimensão falha
+ * isolada, sem afetar as demais nem o resto da sincronização.
+ */
+export async function buscarDemografia(
+  igUserId: string,
+  token: string,
+): Promise<{ genero: ValorDemografia[]; idade: ValorDemografia[]; cidade: ValorDemografia[]; pais: ValorDemografia[] }> {
+  async function buscarBreakdown(breakdown: string): Promise<ValorDemografia[]> {
+    try {
+      const url = new URL(`${BASE}/${igUserId}/insights`);
+      url.searchParams.set("metric", "follower_demographics");
+      url.searchParams.set("period", "lifetime");
+      url.searchParams.set("metric_type", "total_value");
+      url.searchParams.set("breakdown", breakdown);
+      url.searchParams.set("access_token", token);
+      const corpo = await pedir<{
+        data?: { total_value?: { breakdowns?: { results?: { dimension_values?: string[]; value?: number }[] }[] } }[];
+      }>(url.toString());
+      const resultados = corpo.data?.[0]?.total_value?.breakdowns?.[0]?.results ?? [];
+      return resultados
+        .map((r) => ({ valor: r.dimension_values?.[0] ?? "?", quantidade: r.value ?? 0 }))
+        .sort((a, b) => b.quantidade - a.quantidade);
+    } catch {
+      return [];
+    }
+  }
+
+  const [genero, idade, cidade, pais] = await Promise.all([
+    buscarBreakdown("gender"),
+    buscarBreakdown("age"),
+    buscarBreakdown("city"),
+    buscarBreakdown("country"),
+  ]);
+
+  return { genero, idade, cidade, pais };
+}
+
+/**
+ * Distribuição de seguidores online por hora do dia (0–23, fuso da conta).
+ * Best-effort: métrica antiga da API, nem sempre disponível.
+ */
+export async function buscarHorariosAtivos(igUserId: string, token: string): Promise<Record<number, number>> {
+  try {
+    const url = new URL(`${BASE}/${igUserId}/insights`);
+    url.searchParams.set("metric", "online_followers");
+    url.searchParams.set("period", "lifetime");
+    url.searchParams.set("access_token", token);
+    const corpo = await pedir<{ data?: { values?: { value?: Record<string, number> }[] }[] }>(url.toString());
+    const valor = corpo.data?.[0]?.values?.[0]?.value ?? {};
+    const porHora: Record<number, number> = {};
+    for (const [hora, qtd] of Object.entries(valor)) {
+      const h = Number(hora);
+      if (Number.isFinite(h)) porHora[h] = qtd;
+    }
+    return porHora;
+  } catch {
+    return {};
+  }
 }
 
 export type PublicacaoInstagram = {
@@ -165,6 +259,10 @@ export type PublicacaoInstagram = {
   comentarios: number;
   alcance: number;
   compartilhamentos: number;
+  salvamentos: number;
+  interacoesTotais: number;
+  reproducoes: number;
+  tempoMedioExibicao: number;
 };
 
 type MidiaBruta = {
@@ -178,40 +276,62 @@ type MidiaBruta = {
   comments_count?: number;
 };
 
+type InsightsMidia = {
+  alcance: number;
+  compartilhamentos: number;
+  salvamentos: number;
+  interacoesTotais: number;
+  reproducoes: number;
+  tempoMedioExibicao: number;
+};
+
 /**
- * Alcance (e compartilhamentos, só em Reels) por mídia, via insights.
- * Best-effort: nem toda mídia tem esse dado disponível (posts antigos,
- * Stories expiradas), então uma falha aqui não derruba a sincronização — a
- * publicação continua indo pra tabela com curtidas/comentários reais e
- * alcance/compartilhamentos zerados.
+ * Métricas por mídia via insights. Best-effort: nem toda mídia tem esse dado
+ * disponível (posts antigos, Stories expiradas), então uma falha aqui não
+ * derruba a sincronização — a publicação continua indo pra tabela com
+ * curtidas/comentários reais (vêm do objeto da mídia, não de insights) e o
+ * resto zerado.
  */
-async function buscarAlcanceEShares(
-  mediaId: string,
-  token: string,
-  ehReels: boolean,
-): Promise<{ alcance: number; compartilhamentos: number }> {
-  const tentativas = ehReels ? ["reach,shares", "reach"] : ["reach"];
+async function buscarInsightsMidia(mediaId: string, token: string, ehReels: boolean): Promise<InsightsMidia> {
+  const base: InsightsMidia = {
+    alcance: 0,
+    compartilhamentos: 0,
+    salvamentos: 0,
+    interacoesTotais: 0,
+    reproducoes: 0,
+    tempoMedioExibicao: 0,
+  };
+
+  const tentativas = ehReels
+    ? ["reach,shares,saved,total_interactions,plays,ig_reels_avg_watch_time", "reach,saved,total_interactions", "reach"]
+    : ["reach,shares,saved,total_interactions", "reach,saved", "reach"];
+
   for (const metricas of tentativas) {
     try {
       const url = new URL(`${BASE}/${mediaId}/insights`);
       url.searchParams.set("metric", metricas);
       url.searchParams.set("access_token", token);
-      const corpo = await pedir<{ data?: { name: string; values: { value: number }[] }[] }>(
-        url.toString(),
-      );
+      const corpo = await pedir<{ data?: { name: string; values: { value: number }[] }[] }>(url.toString());
       const valores: Record<string, number> = {};
       for (const m of corpo.data ?? []) valores[m.name] = m.values?.[0]?.value ?? 0;
-      return { alcance: valores["reach"] ?? 0, compartilhamentos: valores["shares"] ?? 0 };
+      return {
+        alcance: valores["reach"] ?? 0,
+        compartilhamentos: valores["shares"] ?? 0,
+        salvamentos: valores["saved"] ?? 0,
+        interacoesTotais: valores["total_interactions"] ?? 0,
+        reproducoes: valores["plays"] ?? 0,
+        tempoMedioExibicao: valores["ig_reels_avg_watch_time"] ?? 0,
+      };
     } catch {
       continue;
     }
   }
-  return { alcance: 0, compartilhamentos: 0 };
+  return base;
 }
 
 /**
  * Publicações recentes com curtidas e comentários direto do objeto da mídia
- * (sempre disponível) e alcance/compartilhamentos best-effort via insights.
+ * (sempre disponível) e o restante best-effort via insights.
  */
 export async function buscarPublicacoesRecentes(
   igUserId: string,
@@ -232,7 +352,7 @@ export async function buscarPublicacoesRecentes(
   const publicacoes: PublicacaoInstagram[] = [];
   for (const midia of midias) {
     const ehReels = midia.media_product_type === "REELS";
-    const { alcance, compartilhamentos } = await buscarAlcanceEShares(midia.id, token, ehReels);
+    const insights = await buscarInsightsMidia(midia.id, token, ehReels);
     publicacoes.push({
       mediaId: midia.id,
       tipo: ehReels ? "Reels" : midia.media_type === "CAROUSEL_ALBUM" ? "Carrossel" : "Foto",
@@ -241,8 +361,7 @@ export async function buscarPublicacoesRecentes(
       publicadoEm: midia.timestamp ?? new Date().toISOString(),
       curtidas: midia.like_count ?? 0,
       comentarios: midia.comments_count ?? 0,
-      alcance,
-      compartilhamentos,
+      ...insights,
     });
   }
   return publicacoes;
