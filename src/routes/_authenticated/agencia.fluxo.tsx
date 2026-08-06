@@ -236,11 +236,11 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
     const j = i + direcao;
     if (i < 0 || j < 0 || j >= colunas.length) return;
     const nova = [...colunas];
-    [nova[i], nova[j]] = [nova[j], nova[i]];
+    [nova[i], nova[j]] = [nova[j]!, nova[i]!];
     const reordenadas = nova.map((c, idx) => ({ ...c, ordem: idx }));
     setColunas(reordenadas);
     await Promise.all(
-      [reordenadas[i], reordenadas[j]].map((c) =>
+      [reordenadas[i]!, reordenadas[j]!].map((c) =>
         db.from("fluxo_colunas").update({ ordem: c.ordem }).eq("id", c.id),
       ),
     );

@@ -201,7 +201,7 @@ async function buscarAlcanceEShares(
       );
       const valores: Record<string, number> = {};
       for (const m of corpo.data ?? []) valores[m.name] = m.values?.[0]?.value ?? 0;
-      return { alcance: valores.reach ?? 0, compartilhamentos: valores.shares ?? 0 };
+      return { alcance: valores["reach"] ?? 0, compartilhamentos: valores["shares"] ?? 0 };
     } catch {
       continue;
     }
