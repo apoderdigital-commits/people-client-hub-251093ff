@@ -47,6 +47,19 @@ const configSchema = z.object({
   acao_conversao: z.string().max(120).nullable(),
 });
 
+const instagramIdSchema = z.object({
+  clienteId: z.string().uuid(),
+  instagram_business_account_id: z.string().trim().min(1).max(60),
+});
+
+const sincronizarInstagramSchema = z
+  .object({
+    clienteId: z.string().uuid(),
+    desde: dataISO,
+    ate: dataISO,
+  })
+  .refine((v) => v.desde <= v.ate, { message: "A data inicial deve vir antes da final." });
+
 /**
  * O client tipado é gerado pelo Lovable a partir do schema; enquanto os tipos
  * não são regerados, `clientes_secrets` e as colunas novas não existem para o
@@ -220,6 +233,140 @@ async function sincronizar(
 }
 
 /**
+ * Puxa seguidores, alcance, visitas ao perfil e publicações recentes do
+ * Instagram Business e grava um registro por dia + um por publicação.
+ *
+ * `follower_count` da Graph API é uma variação diária, não um total — o total
+ * atual (`conta.seguidores`) é reconstruído dia a dia para trás, subtraindo a
+ * variação de cada dia a partir de hoje.
+ */
+async function sincronizarInstagram(
+  db: SupabaseClient,
+  clienteId: string,
+  janela: { desde: string; ate: string },
+): Promise<{ dias: number; publicacoes: number }> {
+  const { data: cliente } = await db
+    .from("clientes")
+    .select("instagram_business_account_id")
+    .eq("id", clienteId)
+    .maybeSingle();
+
+  const igId =
+    (cliente as { instagram_business_account_id?: string } | null)
+      ?.instagram_business_account_id ?? "";
+  if (!igId) throw new Error("Cliente sem conta do Instagram Business configurada.");
+
+  const { data: segredo } = await db
+    .from("clientes_secrets")
+    .select("meta_token")
+    .eq("cliente_id", clienteId)
+    .maybeSingle();
+
+  const token = (segredo as { meta_token?: string } | null)?.meta_token ?? "";
+  if (!token) {
+    throw new Error(
+      "Cliente sem token da Meta configurado (o Instagram reaproveita o token do Meta Ads).",
+    );
+  }
+
+  const instagram = await import("@/lib/instagram.server");
+
+  let conta: Awaited<ReturnType<typeof instagram.buscarConta>>;
+  let insights: Awaited<ReturnType<typeof instagram.buscarInsightsConta>>;
+  let publicacoes: Awaited<ReturnType<typeof instagram.buscarPublicacoesRecentes>>;
+  try {
+    [conta, insights, publicacoes] = await Promise.all([
+      instagram.buscarConta(igId, token),
+      instagram.buscarInsightsConta(igId, token, janela.desde, janela.ate),
+      instagram.buscarPublicacoesRecentes(igId, token, 25),
+    ]);
+  } catch (err) {
+    const mensagem = err instanceof Error ? err.message : "Falha ao sincronizar o Instagram.";
+    await db
+      .from("clientes")
+      .update({ instagram_erro_sincronizacao: mensagem })
+      .eq("id", clienteId);
+    throw err;
+  }
+
+  const dias = insights.diarios.map((d) => d.data).sort();
+  const seguidoresPorDia = new Map<string, number>();
+  let acumulado = conta.seguidores;
+  for (let i = dias.length - 1; i >= 0; i--) {
+    seguidoresPorDia.set(dias[i], acumulado);
+    acumulado -= insights.deltasSeguidores[dias[i]] ?? 0;
+  }
+
+  const engajamentoPorDia = new Map<
+    string,
+    { curtidas: number; comentarios: number; compartilhamentos: number }
+  >();
+  for (const p of publicacoes) {
+    const dia = p.publicadoEm.slice(0, 10);
+    const atual = engajamentoPorDia.get(dia) ?? { curtidas: 0, comentarios: 0, compartilhamentos: 0 };
+    atual.curtidas += p.curtidas;
+    atual.comentarios += p.comentarios;
+    atual.compartilhamentos += p.compartilhamentos;
+    engajamentoPorDia.set(dia, atual);
+  }
+
+  const linhas = insights.diarios.map((d) => {
+    const eng = engajamentoPorDia.get(d.data) ?? { curtidas: 0, comentarios: 0, compartilhamentos: 0 };
+    return {
+      cliente_id: clienteId,
+      data: d.data,
+      seguidores: seguidoresPorDia.get(d.data) ?? conta.seguidores,
+      alcance: d.alcance,
+      visitas_perfil: d.visitasPerfil,
+      curtidas: eng.curtidas,
+      comentarios: eng.comentarios,
+      compartilhamentos: eng.compartilhamentos,
+      atualizado_em: new Date().toISOString(),
+    };
+  });
+
+  if (linhas.length > 0) {
+    const { error } = await db
+      .from("metricas_instagram_diarias")
+      .upsert(linhas, { onConflict: "cliente_id,data" });
+    if (error) {
+      throw new Error(erroDoBanco(error, "Métricas do Instagram obtidas, mas não foi possível gravá-las."));
+    }
+  }
+
+  const linhasPosts = publicacoes.map((p) => ({
+    cliente_id: clienteId,
+    media_id: p.mediaId,
+    tipo: p.tipo,
+    legenda: p.legenda,
+    permalink: p.permalink,
+    publicado_em: p.publicadoEm,
+    alcance: p.alcance,
+    curtidas: p.curtidas,
+    comentarios: p.comentarios,
+    compartilhamentos: p.compartilhamentos,
+    atualizado_em: new Date().toISOString(),
+  }));
+
+  if (linhasPosts.length > 0) {
+    const { error } = await db
+      .from("metricas_instagram_posts")
+      .upsert(linhasPosts, { onConflict: "cliente_id,media_id" });
+    if (error) throw new Error(erroDoBanco(error, "Publicações obtidas, mas não foi possível gravá-las."));
+  }
+
+  await db
+    .from("clientes")
+    .update({
+      instagram_ultima_sincronizacao: new Date().toISOString(),
+      instagram_erro_sincronizacao: null,
+    })
+    .eq("id", clienteId);
+
+  return { dias: linhas.length, publicacoes: linhasPosts.length };
+}
+
+/**
  * Cria o cliente e, se token e conta de anúncio vierem preenchidos, valida a
  * credencial na Meta e já faz a primeira carga de métricas.
  */
@@ -343,4 +490,59 @@ export const salvarConfigMetricas = createServerFn({ method: "POST" })
 
     if (error) throw new Error(erroDoBanco(error, "Não foi possível salvar a configuração."));
     return { metricas };
+  });
+
+/**
+ * Guarda o ID da conta do Instagram Business, valida com o token da Meta já
+ * salvo (é o mesmo token, sem campo próprio) e faz a primeira carga.
+ */
+export const salvarInstagramBusinessId = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => instagramIdSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    await exigirEdicaoDeClientes(context.supabase as unknown as SupabaseClient, context.userId);
+    const db = await admin();
+
+    const { data: segredo } = await db
+      .from("clientes_secrets")
+      .select("meta_token")
+      .eq("cliente_id", data.clienteId)
+      .maybeSingle();
+    const token = (segredo as { meta_token?: string } | null)?.meta_token ?? "";
+    if (!token) {
+      throw new Error(
+        "Salve o token da Meta (bloco Meta Ads) antes de configurar o Instagram — ele reaproveita o mesmo token.",
+      );
+    }
+
+    const instagram = await import("@/lib/instagram.server");
+    const conta = await instagram.validarCredenciais(data.instagram_business_account_id, token);
+
+    const { error } = await db
+      .from("clientes")
+      .update({
+        instagram_business_account_id: data.instagram_business_account_id,
+        instagram_erro_sincronizacao: null,
+      })
+      .eq("id", data.clienteId);
+    if (error) throw new Error(erroDoBanco(error, "Não foi possível salvar a conta do Instagram."));
+
+    // O cadastro já existe; uma falha aqui não deve desfazê-lo. Ela fica
+    // registrada em instagram_erro_sincronizacao e o botão Sincronizar resolve.
+    try {
+      const { dias } = await sincronizarInstagram(db, data.clienteId, janelaPadrao());
+      return { username: conta.username, sincronizado: dias };
+    } catch {
+      return { username: conta.username, sincronizado: 0 };
+    }
+  });
+
+/** Puxa novamente as métricas do Instagram de um cliente, na janela informada. */
+export const sincronizarMetricasInstagram = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => sincronizarInstagramSchema.parse(data))
+  .handler(async ({ data, context }) => {
+    await exigirEdicaoDeClientes(context.supabase as unknown as SupabaseClient, context.userId);
+    const db = await admin();
+    return await sincronizarInstagram(db, data.clienteId, { desde: data.desde, ate: data.ate });
   });

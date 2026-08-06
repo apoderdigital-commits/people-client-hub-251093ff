@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  Instagram as InstagramIcon,
   KeyRound,
   Loader2,
   Plus,
@@ -22,7 +23,9 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   criarClienteComMeta,
   salvarConfigMetricas,
+  salvarInstagramBusinessId,
   salvarTokenMeta,
+  sincronizarMetricasInstagram,
   sincronizarMetricasMeta,
 } from "@/lib/clientes.functions";
 import {
@@ -73,10 +76,13 @@ type Cliente = {
   metricas_kpis: unknown;
   acao_lead: string | null;
   acao_conversao: string | null;
+  instagram_business_account_id: string | null;
+  instagram_ultima_sincronizacao: string | null;
+  instagram_erro_sincronizacao: string | null;
 };
 
 const COLUNAS =
-  "id, nome, identificador, ad_account_id, investimento_mensal, meta_faturamento, token_atualizado_em, ultima_sincronizacao, erro_sincronizacao, metricas_kpis, acao_lead, acao_conversao";
+  "id, nome, identificador, ad_account_id, investimento_mensal, meta_faturamento, token_atualizado_em, ultima_sincronizacao, erro_sincronizacao, metricas_kpis, acao_lead, acao_conversao, instagram_business_account_id, instagram_ultima_sincronizacao, instagram_erro_sincronizacao";
 
 /** types.ts é gerado pelo Lovable e ainda não conhece as colunas novas. */
 const db = supabase as unknown as SupabaseClient;
@@ -296,6 +302,9 @@ function Painel() {
             metricas_kpis: null,
             acao_lead: null,
             acao_conversao: null,
+            instagram_business_account_id: null,
+            instagram_ultima_sincronizacao: null,
+            instagram_erro_sincronizacao: null,
           },
         ].sort((a, b) => a.nome.localeCompare(b.nome)),
       );
@@ -491,6 +500,11 @@ function Painel() {
               </div>
 
               <Meta
+                cliente={cliente}
+                onAtualizar={(mudancas) => atualizarNaLista(cliente.id, mudancas)}
+              />
+
+              <Instagram
                 cliente={cliente}
                 onAtualizar={(mudancas) => atualizarNaLista(cliente.id, mudancas)}
               />
@@ -860,6 +874,146 @@ function Meta({
         >
           {salvando ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
           {salvando ? "Validando…" : "Salvar token"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void puxar()}
+          disabled={sincronizando || !configurado}
+          className="inline-flex items-center gap-2 rounded-xl border border-input px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand disabled:opacity-60"
+        >
+          <RefreshCw className={`size-4 ${sincronizando ? "animate-spin" : ""}`} />
+          {sincronizando ? "Sincronizando…" : "Sincronizar"}
+        </button>
+      </div>
+
+      {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
+      {ok ? <p className="mt-2 text-sm text-success">{ok}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Bloco de integração com o Instagram Business: reaproveita o token da Meta
+ * salvo acima, só pede o ID da conta.
+ */
+function Instagram({
+  cliente,
+  onAtualizar,
+}: {
+  cliente: Cliente;
+  onAtualizar: (mudancas: Partial<Cliente>) => void;
+}) {
+  const salvarId = useServerFn(salvarInstagramBusinessId);
+  const sincronizar = useServerFn(sincronizarMetricasInstagram);
+  const [id, setId] = useState(cliente.instagram_business_account_id ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const configurado = Boolean(cliente.instagram_business_account_id);
+
+  async function salvar() {
+    if (!id.trim()) return setErro("Informe o ID da conta do Instagram Business.");
+    setSalvando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      const res = await salvarId({
+        data: { clienteId: cliente.id, instagram_business_account_id: id.trim() },
+      });
+      onAtualizar({
+        instagram_business_account_id: id.trim(),
+        instagram_ultima_sincronizacao:
+          res.sincronizado > 0 ? new Date().toISOString() : cliente.instagram_ultima_sincronizacao,
+        instagram_erro_sincronizacao: null,
+      });
+      setOk(
+        res.sincronizado > 0
+          ? `Conta "@${res.username}" validada e ${res.sincronizado} dias importados.`
+          : `Conta "@${res.username}" validada. Use Sincronizar para importar as métricas.`,
+      );
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Não foi possível salvar.");
+    }
+    setSalvando(false);
+  }
+
+  async function puxar() {
+    setSincronizando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      const janela = intervalo("30d");
+      const res = await sincronizar({
+        data: { clienteId: cliente.id, desde: janela.desde, ate: janela.ate },
+      });
+      onAtualizar({
+        instagram_ultima_sincronizacao: new Date().toISOString(),
+        instagram_erro_sincronizacao: null,
+      });
+      setOk(
+        res.dias > 0
+          ? `${res.dias} dias e ${res.publicacoes} publicações atualizados.`
+          : "O Instagram não devolveu dados para este período.",
+      );
+    } catch (err) {
+      const mensagem = err instanceof Error ? err.message : "Falha ao sincronizar.";
+      setErro(mensagem);
+      onAtualizar({ instagram_erro_sincronizacao: mensagem });
+    }
+    setSincronizando(false);
+  }
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Instagram Business
+        </p>
+        <span className="text-[11px] text-ink-muted">
+          {configurado ? "Conta configurada" : "Sem conta"} · última sincronização:{" "}
+          {quando(cliente.instagram_ultima_sincronizacao)}
+        </span>
+      </div>
+
+      <p className="mt-2 text-[11px] text-ink-muted">
+        Reaproveita o token da Meta acima — o Usuário do Sistema precisa ter os escopos
+        instagram_basic e instagram_manage_insights.
+      </p>
+
+      {cliente.instagram_erro_sincronizacao ? (
+        <p className="mt-3 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          {cliente.instagram_erro_sincronizacao}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="min-w-[220px] flex-1">
+          <span className="text-xs font-medium text-ink-muted">
+            ID da conta do Instagram Business
+          </span>
+          <input
+            type="text"
+            value={id}
+            onChange={(e) => setId(e.target.value)}
+            placeholder="17841400000000000"
+            className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void salvar()}
+          disabled={salvando || id.trim().length === 0}
+          className="inline-flex items-center gap-2 rounded-xl border border-input px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand disabled:opacity-60"
+        >
+          {salvando ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <InstagramIcon className="size-4" />
+          )}
+          {salvando ? "Validando…" : "Salvar conta"}
         </button>
         <button
           type="button"
