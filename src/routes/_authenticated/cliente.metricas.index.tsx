@@ -5,7 +5,7 @@ import { MenuCard } from "@/components/MenuCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { VisaoClienteBanner, VisaoClienteGate } from "@/components/VisaoCliente";
 
-export const Route = createFileRoute("/_authenticated/cliente/metricas")({
+export const Route = createFileRoute("/_authenticated/cliente/metricas/")({
   head: () => ({
     meta: [
       { title: "Dashboard de Métricas — people" },

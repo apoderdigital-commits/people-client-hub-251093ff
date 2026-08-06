@@ -16,7 +16,7 @@ import { Route as AuthenticatedAgenciaClientesRouteImport } from './routes/_auth
 import { Route as AuthenticatedAgenciaEquipeRouteImport } from './routes/_authenticated/agencia.equipe'
 import { Route as AuthenticatedAgenciaVisualizarRouteImport } from './routes/_authenticated/agencia.visualizar'
 import { Route as AuthenticatedClienteIndexRouteImport } from './routes/_authenticated/cliente.index'
-import { Route as AuthenticatedClienteMetricasRouteImport } from './routes/_authenticated/cliente.metricas'
+import { Route as AuthenticatedClienteMetricasIndexRouteImport } from './routes/_authenticated/cliente.metricas.index'
 import { Route as AuthenticatedClienteMetricasMetaAdsRouteImport } from './routes/_authenticated/cliente.metricas.meta-ads'
 import { Route as AuthenticatedClienteMetricasInstagramRouteImport } from './routes/_authenticated/cliente.metricas.instagram'
 
@@ -59,10 +59,10 @@ const AuthenticatedClienteIndexRoute =
     path: '/cliente/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedClienteMetricasRoute =
-  AuthenticatedClienteMetricasRouteImport.update({
-    id: '/cliente/metricas',
-    path: '/cliente/metricas',
+const AuthenticatedClienteMetricasIndexRoute =
+  AuthenticatedClienteMetricasIndexRouteImport.update({
+    id: '/cliente/metricas/',
+    path: '/cliente/metricas/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedClienteMetricasMetaAdsRoute =
@@ -83,22 +83,22 @@ export interface FileRoutesByFullPath {
   '/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
-  '/cliente/metricas': typeof AuthenticatedClienteMetricasRoute
   '/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
   '/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/agencia/': typeof AuthenticatedAgenciaIndexRoute
   '/cliente/': typeof AuthenticatedClienteIndexRoute
+  '/cliente/metricas/': typeof AuthenticatedClienteMetricasIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
-  '/cliente/metricas': typeof AuthenticatedClienteMetricasRoute
   '/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
   '/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/agencia': typeof AuthenticatedAgenciaIndexRoute
   '/cliente': typeof AuthenticatedClienteIndexRoute
+  '/cliente/metricas': typeof AuthenticatedClienteMetricasIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -107,11 +107,11 @@ export interface FileRoutesById {
   '/_authenticated/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/_authenticated/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/_authenticated/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
-  '/_authenticated/cliente/metricas': typeof AuthenticatedClienteMetricasRoute
   '/_authenticated/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
   '/_authenticated/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/_authenticated/agencia/': typeof AuthenticatedAgenciaIndexRoute
   '/_authenticated/cliente/': typeof AuthenticatedClienteIndexRoute
+  '/_authenticated/cliente/metricas/': typeof AuthenticatedClienteMetricasIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -120,22 +120,22 @@ export interface FileRouteTypes {
     | '/agencia/clientes'
     | '/agencia/equipe'
     | '/agencia/visualizar'
-    | '/cliente/metricas'
     | '/cliente/metricas/meta-ads'
     | '/cliente/metricas/instagram'
     | '/agencia/'
     | '/cliente/'
+    | '/cliente/metricas/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/agencia/clientes'
     | '/agencia/equipe'
     | '/agencia/visualizar'
-    | '/cliente/metricas'
     | '/cliente/metricas/meta-ads'
     | '/cliente/metricas/instagram'
     | '/agencia'
     | '/cliente'
+    | '/cliente/metricas'
   id:
     | '__root__'
     | '/'
@@ -143,11 +143,11 @@ export interface FileRouteTypes {
     | '/_authenticated/agencia/clientes'
     | '/_authenticated/agencia/equipe'
     | '/_authenticated/agencia/visualizar'
-    | '/_authenticated/cliente/metricas'
     | '/_authenticated/cliente/metricas/meta-ads'
     | '/_authenticated/cliente/metricas/instagram'
     | '/_authenticated/agencia/'
     | '/_authenticated/cliente/'
+    | '/_authenticated/cliente/metricas/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -206,11 +206,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClienteIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/cliente/metricas': {
-      id: '/_authenticated/cliente/metricas'
+    '/_authenticated/cliente/metricas/': {
+      id: '/_authenticated/cliente/metricas/'
       path: '/cliente/metricas'
-      fullPath: '/cliente/metricas'
-      preLoaderRoute: typeof AuthenticatedClienteMetricasRouteImport
+      fullPath: '/cliente/metricas/'
+      preLoaderRoute: typeof AuthenticatedClienteMetricasIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/cliente/metricas/meta-ads': {
@@ -234,22 +234,22 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgenciaClientesRoute: typeof AuthenticatedAgenciaClientesRoute
   AuthenticatedAgenciaEquipeRoute: typeof AuthenticatedAgenciaEquipeRoute
   AuthenticatedAgenciaVisualizarRoute: typeof AuthenticatedAgenciaVisualizarRoute
-  AuthenticatedClienteMetricasRoute: typeof AuthenticatedClienteMetricasRoute
   AuthenticatedClienteMetricasMetaAdsRoute: typeof AuthenticatedClienteMetricasMetaAdsRoute
   AuthenticatedClienteMetricasInstagramRoute: typeof AuthenticatedClienteMetricasInstagramRoute
   AuthenticatedAgenciaIndexRoute: typeof AuthenticatedAgenciaIndexRoute
   AuthenticatedClienteIndexRoute: typeof AuthenticatedClienteIndexRoute
+  AuthenticatedClienteMetricasIndexRoute: typeof AuthenticatedClienteMetricasIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgenciaClientesRoute: AuthenticatedAgenciaClientesRoute,
   AuthenticatedAgenciaEquipeRoute: AuthenticatedAgenciaEquipeRoute,
   AuthenticatedAgenciaVisualizarRoute: AuthenticatedAgenciaVisualizarRoute,
-  AuthenticatedClienteMetricasRoute: AuthenticatedClienteMetricasRoute,
   AuthenticatedClienteMetricasMetaAdsRoute: AuthenticatedClienteMetricasMetaAdsRoute,
   AuthenticatedClienteMetricasInstagramRoute: AuthenticatedClienteMetricasInstagramRoute,
   AuthenticatedAgenciaIndexRoute: AuthenticatedAgenciaIndexRoute,
   AuthenticatedClienteIndexRoute: AuthenticatedClienteIndexRoute,
+  AuthenticatedClienteMetricasIndexRoute: AuthenticatedClienteMetricasIndexRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
