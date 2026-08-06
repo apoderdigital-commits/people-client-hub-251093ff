@@ -1,13 +1,22 @@
-// Edge Function: executa automações vencidas (chamada pelo pg_cron a cada 5
-// minutos). Roda fora do app principal de propósito — é o único jeito de ter
-// um agendador de verdade neste projeto (Vite/TanStack Start não tem cron
-// embutido).
+// Edge Function: executa automações.
 //
-// Nós suportados (conjunto fechado, sem HTTP genérico):
-//   gatilho_horario      -- dispara uma vez por dia no horário configurado
-//   acao_sync_meta       -- sincroniza metricas_campanhas de todos os clientes com token
-//   acao_sync_instagram  -- sincroniza metricas_instagram_diarias/posts de todos os clientes
-//   acao_cartoes_vencidos -- move cartões com prazo vencido para "Atrasado"
+// Três formas de chamar:
+//   1. Corpo vazio (pg_cron, a cada 5 min)      -- checa gatilhos de horário
+//   2. { forcarId }  ("Testar agora" no painel)  -- roda essa automação na hora
+//   3. { evento, cartaoId, colunaId, ... }        -- trigger do Postgres em
+//      fluxo_cartoes (cartão criado/movido), chamado via pg_net em tempo real
+//
+// Nós suportados (conjunto fechado):
+//   gatilho_horario        -- dispara 1x/dia no horário configurado
+//   gatilho_cartao_criado  -- dispara quando um cartão novo é criado
+//   gatilho_cartao_movido  -- dispara quando um cartão entra na coluna configurada
+//   logica_se              -- compara um campo do cartão/contexto, ramifica true/false
+//   acao_sync_meta         -- sincroniza metricas_campanhas de todos os clientes com token
+//   acao_sync_instagram    -- sincroniza metricas_instagram_* de todos os clientes
+//   acao_cartoes_vencidos  -- move cartões com prazo vencido para "Atrasado"
+//   acao_mover_cartao      -- move o cartão do contexto para a coluna configurada
+//   acao_criar_cartao      -- cria um cartão novo numa coluna
+//   acao_whatsapp          -- envia mensagem via Evolution API (credencial configurada)
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -15,8 +24,26 @@ const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const VERSAO_API = "v21.0";
 const BASE_META = `https://graph.facebook.com/${VERSAO_API}`;
 
+type DB = ReturnType<typeof createClient>;
+
 type No = { id: string; tipo: string; config?: Record<string, unknown> };
-type Conexao = { origem: string; destino: string };
+type Conexao = { origem: string; origemHandle?: string; destino: string };
+type Automacao = {
+  id: string;
+  nos: No[];
+  conexoes: Conexao[];
+  criado_por: string | null;
+};
+
+type Contexto = {
+  cartaoId?: string;
+  cartaoTitulo?: string;
+  colunaId?: string;
+  colunaNome?: string;
+  colunaAnteriorId?: string;
+  clienteId?: string | null;
+  clienteNome?: string;
+};
 
 function numero(v: string | undefined): number {
   const n = Number(v);
@@ -38,7 +65,6 @@ function isoDiasAtras(dias: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Hora atual em America/Sao_Paulo, formato "HH:MM" (Brasil não tem DST desde 2019). */
 function horaBrasilAgora(): { hora: string; dataISO: string } {
   const brasil = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const hh = String(brasil.getUTCHours()).padStart(2, "0");
@@ -51,10 +77,17 @@ function bucketDe5min(hhmm: string): number {
   return Math.floor((h * 60 + m) / 5);
 }
 
+function preencherTemplate(template: string, contexto: Contexto): string {
+  return template
+    .replaceAll("{{titulo}}", contexto.cartaoTitulo ?? "")
+    .replaceAll("{{coluna}}", contexto.colunaNome ?? "")
+    .replaceAll("{{cliente}}", contexto.clienteNome ?? "");
+}
+
 // --- ação: sincronizar Meta Ads (metricas_campanhas) ---
 
 async function sincronizarMetaDoCliente(
-  db: ReturnType<typeof createClient>,
+  db: DB,
   cliente: { id: string; ad_account_id: string; acao_lead: string | null; acao_conversao: string | null },
   token: string,
 ): Promise<{ linhas: number }> {
@@ -144,7 +177,7 @@ async function sincronizarMetaDoCliente(
   return { linhas: linhas.length };
 }
 
-async function acaoSyncMeta(db: ReturnType<typeof createClient>): Promise<Record<string, unknown>> {
+async function acaoSyncMeta(db: DB): Promise<Record<string, unknown>> {
   const { data: clientes } = await db
     .from("clientes")
     .select("id, ad_account_id, acao_lead, acao_conversao")
@@ -179,7 +212,7 @@ async function acaoSyncMeta(db: ReturnType<typeof createClient>): Promise<Record
 // --- ação: sincronizar Instagram Business ---
 
 async function sincronizarInstagramDoCliente(
-  db: ReturnType<typeof createClient>,
+  db: DB,
   clienteId: string,
   igId: string,
   token: string,
@@ -301,7 +334,7 @@ async function sincronizarInstagramDoCliente(
   return { dias: linhasDiarias.length, publicacoes: linhasPosts.length };
 }
 
-async function acaoSyncInstagram(db: ReturnType<typeof createClient>): Promise<Record<string, unknown>> {
+async function acaoSyncInstagram(db: DB): Promise<Record<string, unknown>> {
   const { data: clientes } = await db
     .from("clientes")
     .select("id, instagram_business_account_id")
@@ -332,12 +365,13 @@ async function acaoSyncInstagram(db: ReturnType<typeof createClient>): Promise<R
 
 // --- ação: mover cartões vencidos ---
 
-async function acaoCartoesVencidos(
-  db: ReturnType<typeof createClient>,
-  autorId: string | null,
-): Promise<Record<string, unknown>> {
-  const { data: colunas } = await db.from("fluxo_colunas").select("id, nome");
-  const listaColunas = (colunas ?? []) as { id: string; nome: string }[];
+async function buscarColunas(db: DB): Promise<{ id: string; nome: string }[]> {
+  const { data } = await db.from("fluxo_colunas").select("id, nome");
+  return (data ?? []) as { id: string; nome: string }[];
+}
+
+async function acaoCartoesVencidos(db: DB, autorId: string | null): Promise<Record<string, unknown>> {
+  const listaColunas = await buscarColunas(db);
   const colunaAtrasado = listaColunas.find((c) => c.nome.trim().toLowerCase() === "atrasado");
   if (!colunaAtrasado) throw new Error('Coluna "Atrasado" não encontrada no Fluxo People.');
 
@@ -346,10 +380,7 @@ async function acaoCartoesVencidos(
     .map((c) => c.id);
 
   const hoje = new Date().toISOString().slice(0, 10);
-  let query = db
-    .from("fluxo_cartoes")
-    .select("id, titulo, coluna_id")
-    .lt("prazo", hoje);
+  let query = db.from("fluxo_cartoes").select("id, titulo, coluna_id").lt("prazo", hoje);
   if (idsExcluidos.length > 0) query = query.not("coluna_id", "in", `(${idsExcluidos.join(",")})`);
 
   const { data: cartoes, error } = await query;
@@ -370,17 +401,179 @@ async function acaoCartoesVencidos(
   return { movidos: lista.length };
 }
 
-// --- orquestração ---
+// --- ação: mover cartão (genérica, usa o cartão do contexto) ---
 
-const EXECUTORES: Record<string, (db: ReturnType<typeof createClient>, autorId: string | null) => Promise<Record<string, unknown>>> = {
+async function acaoMoverCartao(
+  db: DB,
+  config: Record<string, unknown> | undefined,
+  contexto: Contexto,
+): Promise<Record<string, unknown>> {
+  const colunaDestino = config?.colunaDestino as string | undefined;
+  if (!colunaDestino) throw new Error('Nó "Mover cartão" sem coluna de destino configurada.');
+  if (!contexto.cartaoId) throw new Error('Nó "Mover cartão" precisa de um cartão no contexto (use após um gatilho de cartão).');
+
+  const { error } = await db.from("fluxo_cartoes").update({ coluna_id: colunaDestino }).eq("id", contexto.cartaoId);
+  if (error) throw new Error(error.message);
+  return { moveu: contexto.cartaoId, para: colunaDestino };
+}
+
+// --- ação: criar cartão ---
+
+async function acaoCriarCartao(
+  db: DB,
+  config: Record<string, unknown> | undefined,
+  contexto: Contexto,
+): Promise<Record<string, unknown>> {
+  const colunaId = config?.colunaCriacao as string | undefined;
+  if (!colunaId) throw new Error('Nó "Criar cartão" sem coluna configurada.');
+  const tituloTemplate = (config?.tituloTemplate as string | undefined) ?? "Novo cartão";
+  const titulo = preencherTemplate(tituloTemplate, contexto);
+
+  const { count } = await db
+    .from("fluxo_cartoes")
+    .select("id", { count: "exact", head: true })
+    .eq("coluna_id", colunaId);
+
+  const { data, error } = await db
+    .from("fluxo_cartoes")
+    .insert({ coluna_id: colunaId, titulo, ordem: count ?? 0, cliente_id: contexto.clienteId ?? null })
+    .select("id")
+    .single();
+  if (error) throw new Error(error.message);
+
+  return { criado: (data as { id: string }).id };
+}
+
+// --- ação: enviar WhatsApp via Evolution API ---
+
+async function acaoWhatsapp(
+  db: DB,
+  config: Record<string, unknown> | undefined,
+  contexto: Contexto,
+): Promise<Record<string, unknown>> {
+  const credencialId = config?.credencialId as string | undefined;
+  if (!credencialId) throw new Error('Nó "Enviar WhatsApp" sem credencial configurada.');
+
+  const { data: cred } = await db
+    .from("automacoes_credenciais")
+    .select("config")
+    .eq("id", credencialId)
+    .maybeSingle();
+  const credConfig = (cred as { config?: Record<string, unknown> } | null)?.config;
+  const baseUrl = credConfig?.baseUrl as string | undefined;
+  const apiKey = credConfig?.apiKey as string | undefined;
+  const instance = credConfig?.instance as string | undefined;
+  if (!baseUrl || !apiKey || !instance) throw new Error("Credencial da Evolution API incompleta.");
+
+  const numeroTemplate = (config?.numeroTemplate as string | undefined) ?? "";
+  const mensagemTemplate = (config?.mensagemTemplate as string | undefined) ?? "";
+  const numero = preencherTemplate(numeroTemplate, contexto).replace(/\D/g, "");
+  const mensagem = preencherTemplate(mensagemTemplate, contexto);
+  if (!numero || !mensagem) throw new Error('Nó "Enviar WhatsApp" sem número ou mensagem preenchidos.');
+
+  const url = `${baseUrl.replace(/\/$/, "")}/message/sendText/${instance}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: apiKey },
+    body: JSON.stringify({ number: numero, text: mensagem }),
+  });
+  const corpo = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(`Evolution API respondeu ${resp.status}: ${JSON.stringify(corpo)}`);
+
+  return { enviado_para: numero };
+}
+
+// --- lógica: SE ---
+
+async function avaliarLogicaSe(
+  db: DB,
+  config: Record<string, unknown> | undefined,
+  contexto: Contexto,
+): Promise<boolean> {
+  const campo = config?.campo as string | undefined;
+  const operador = (config?.operador as string | undefined) ?? "igual";
+  const valorEsperado = ((config?.valor as string | undefined) ?? "").trim().toLowerCase();
+
+  let valorReal = "";
+  if (campo === "coluna") valorReal = (contexto.colunaNome ?? "").toLowerCase();
+  else if (campo === "cliente") valorReal = (contexto.clienteNome ?? "").toLowerCase();
+  else if (campo === "titulo") valorReal = (contexto.cartaoTitulo ?? "").toLowerCase();
+  else return false;
+
+  if (operador === "igual") return valorReal === valorEsperado;
+  if (operador === "diferente") return valorReal !== valorEsperado;
+  if (operador === "contem") return valorReal.includes(valorEsperado);
+  return false;
+}
+
+// --- orquestração: caminha o grafo a partir de um nó, respeitando ramos do SE ---
+
+async function executarAPartirDe(
+  db: DB,
+  nos: No[],
+  conexoes: Conexao[],
+  idInicial: string,
+  contexto: Contexto,
+  autorId: string | null,
+  resultado: Record<string, unknown>,
+): Promise<void> {
+  const fila = [idInicial];
+  const visitados = new Set<string>();
+
+  while (fila.length > 0) {
+    const id = fila.shift()!;
+    if (visitados.has(id)) continue;
+    visitados.add(id);
+
+    const no = nos.find((n) => n.id === id);
+    if (!no) continue;
+
+    if (no.tipo === "logica_se") {
+      const passou = await avaliarLogicaSe(db, no.config, contexto);
+      resultado[`logica_se:${id}`] = passou;
+      const handleAlvo = passou ? "true" : "false";
+      const proximos = conexoes
+        .filter((c) => c.origem === id && (c.origemHandle ?? "true") === handleAlvo)
+        .map((c) => c.destino);
+      fila.push(...proximos);
+      continue;
+    }
+
+    if (no.tipo.startsWith("gatilho_")) {
+      // gatilhos não "executam" — só o ponto de partida do grafo.
+    } else {
+      const executor = ACOES[no.tipo];
+      if (executor) {
+        resultado[`${no.tipo}:${id}`] = await executor(db, no.config, contexto, autorId);
+      }
+    }
+
+    const proximos = conexoes.filter((c) => c.origem === id).map((c) => c.destino);
+    fila.push(...proximos);
+  }
+}
+
+type ExecutorAcao = (
+  db: DB,
+  config: Record<string, unknown> | undefined,
+  contexto: Contexto,
+  autorId: string | null,
+) => Promise<Record<string, unknown>>;
+
+const ACOES: Record<string, ExecutorAcao> = {
   acao_sync_meta: (db) => acaoSyncMeta(db),
   acao_sync_instagram: (db) => acaoSyncInstagram(db),
-  acao_cartoes_vencidos: (db, autorId) => acaoCartoesVencidos(db, autorId),
+  acao_cartoes_vencidos: (db, _c, _ctx, autorId) => acaoCartoesVencidos(db, autorId),
+  acao_mover_cartao: (db, config, contexto) => acaoMoverCartao(db, config, contexto),
+  acao_criar_cartao: (db, config, contexto) => acaoCriarCartao(db, config, contexto),
+  acao_whatsapp: (db, config, contexto) => acaoWhatsapp(db, config, contexto),
 };
 
-async function executarAutomacao(
-  db: ReturnType<typeof createClient>,
-  automacao: { id: string; nos: No[]; conexoes: Conexao[]; criado_por: string | null },
+async function registrarExecucao(
+  db: DB,
+  automacao: Automacao,
+  gatilhoId: string,
+  contexto: Contexto,
 ): Promise<void> {
   const { data: execucao } = await db
     .from("automacoes_execucoes")
@@ -389,26 +582,10 @@ async function executarAutomacao(
     .single();
   const execucaoId = (execucao as { id: string } | null)?.id;
 
-  const nos = automacao.nos ?? [];
-  const conexoes = automacao.conexoes ?? [];
-  const gatilho = nos.find((n) => n.tipo === "gatilho_horario");
-  if (!gatilho) return;
-
-  // Ordem de execução: segue as conexões a partir do gatilho; sem conexão,
-  // roda todo nó de ação na ordem em que foi salvo (fallback simples).
-  const proximos = conexoes.filter((c) => c.origem === gatilho.id).map((c) => c.destino);
-  const idsAcoes = proximos.length > 0 ? proximos : nos.filter((n) => n.id !== gatilho.id).map((n) => n.id);
-
   const resultado: Record<string, unknown> = {};
   let erro: string | null = null;
   try {
-    for (const id of idsAcoes) {
-      const no = nos.find((n) => n.id === id);
-      if (!no) continue;
-      const executor = EXECUTORES[no.tipo];
-      if (!executor) continue;
-      resultado[no.tipo] = await executor(db, automacao.criado_por);
-    }
+    await executarAPartirDe(db, automacao.nos, automacao.conexoes, gatilhoId, contexto, automacao.criado_por, resultado);
   } catch (err) {
     erro = err instanceof Error ? err.message : String(err);
   }
@@ -416,16 +593,35 @@ async function executarAutomacao(
   if (execucaoId) {
     await db
       .from("automacoes_execucoes")
-      .update({
-        finalizado_em: new Date().toISOString(),
-        status: erro ? "erro" : "sucesso",
-        resultado,
-        erro,
-      })
+      .update({ finalizado_em: new Date().toISOString(), status: erro ? "erro" : "sucesso", resultado, erro })
       .eq("id", execucaoId);
   }
 
   await db.from("automacoes").update({ ultima_execucao: new Date().toISOString() }).eq("id", automacao.id);
+}
+
+async function contextoDoCartao(db: DB, cartaoId: string, colunaId?: string): Promise<Contexto> {
+  const { data: cartao } = await db
+    .from("fluxo_cartoes")
+    .select("id, titulo, coluna_id, cliente_id")
+    .eq("id", cartaoId)
+    .maybeSingle();
+  const c = cartao as { id: string; titulo: string; coluna_id: string; cliente_id: string | null } | null;
+  if (!c) return { cartaoId };
+
+  const [{ data: coluna }, { data: cliente }] = await Promise.all([
+    db.from("fluxo_colunas").select("nome").eq("id", colunaId ?? c.coluna_id).maybeSingle(),
+    c.cliente_id ? db.from("clientes").select("nome").eq("id", c.cliente_id).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+
+  return {
+    cartaoId: c.id,
+    cartaoTitulo: c.titulo,
+    colunaId: colunaId ?? c.coluna_id,
+    colunaNome: (coluna as { nome?: string } | null)?.nome ?? "",
+    clienteId: c.cliente_id,
+    clienteNome: (cliente as { nome?: string } | null)?.nome ?? "",
+  };
 }
 
 Deno.serve(async (req) => {
@@ -438,32 +634,70 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
   }
 
-  // "Testar agora" (painel de Automações) manda forcarId: roda essa
-  // automação na hora, ignorando horário configurado e a guarda de "já
-  // rodou hoje" — mesmo caminho de execução do cron, só sem o filtro.
-  let forcarId: string | null = null;
+  let corpo: Record<string, unknown> = {};
   try {
-    const corpo = await req.json();
-    forcarId = typeof corpo?.forcarId === "string" ? corpo.forcarId : null;
+    corpo = await req.json();
   } catch {
-    // corpo vazio (chamada do pg_cron) — segue sem forçar nada.
+    // corpo vazio (chamada do pg_cron) — segue em modo agendamento.
   }
 
+  const forcarId = typeof corpo.forcarId === "string" ? corpo.forcarId : null;
+  const evento = typeof corpo.evento === "string" ? corpo.evento : null;
+
+  // --- modo 2: forçar execução (Testar agora) ---
   if (forcarId) {
     const { data: automacao } = await db
       .from("automacoes")
       .select("id, nos, conexoes, criado_por")
       .eq("id", forcarId)
       .maybeSingle();
-    if (automacao) {
-      await executarAutomacao(db, automacao as { id: string; nos: No[]; conexoes: Conexao[]; criado_por: string | null });
-      return new Response(JSON.stringify({ ok: true, executadas: [forcarId] }), {
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!automacao) return new Response(JSON.stringify({ ok: false, error: "Automação não encontrada." }), { status: 404 });
+
+    const a = automacao as Automacao;
+    const gatilho = a.nos.find((n) => n.tipo.startsWith("gatilho_"));
+    if (!gatilho) return new Response(JSON.stringify({ ok: false, error: "Sem gatilho." }), { status: 400 });
+
+    let contexto: Contexto = {};
+    if (gatilho.tipo !== "gatilho_horario" && typeof corpo.cartaoId === "string") {
+      contexto = await contextoDoCartao(db, corpo.cartaoId as string);
     }
-    return new Response(JSON.stringify({ ok: false, error: "Automação não encontrada." }), { status: 404 });
+    await registrarExecucao(db, a, gatilho.id, contexto);
+    return new Response(JSON.stringify({ ok: true, executadas: [a.id] }), {
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
+  // --- modo 3: evento do Fluxo People (cartão criado/movido) ---
+  if (evento) {
+    const cartaoId = typeof corpo.cartaoId === "string" ? corpo.cartaoId : null;
+    const colunaId = typeof corpo.colunaId === "string" ? corpo.colunaId : null;
+    if (!cartaoId || !colunaId) {
+      return new Response(JSON.stringify({ ok: false, error: "Evento sem cartaoId/colunaId." }), { status: 400 });
+    }
+
+    const tipoGatilho = evento === "cartao_criado" ? "gatilho_cartao_criado" : "gatilho_cartao_movido";
+    const { data: automacoesAtivas } = await db.from("automacoes").select("id, nos, conexoes, criado_por").eq("ativo", true);
+
+    const contexto = await contextoDoCartao(db, cartaoId, colunaId);
+    const executadas: string[] = [];
+
+    for (const automacao of (automacoesAtivas ?? []) as Automacao[]) {
+      const gatilho = automacao.nos.find((n) => n.tipo === tipoGatilho);
+      if (!gatilho) continue;
+      if (tipoGatilho === "gatilho_cartao_movido") {
+        const colunaEsperada = gatilho.config?.colunaDestino as string | undefined;
+        if (!colunaEsperada || colunaEsperada !== colunaId) continue;
+      }
+      await registrarExecucao(db, automacao, gatilho.id, contexto);
+      executadas.push(automacao.id);
+    }
+
+    return new Response(JSON.stringify({ ok: true, executadas }), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // --- modo 1: polling do gatilho de horário (pg_cron a cada 5 min) ---
   const { hora, dataISO } = horaBrasilAgora();
   const bucketAtual = bucketDe5min(hora);
 
@@ -473,17 +707,10 @@ Deno.serve(async (req) => {
     .eq("ativo", true);
 
   const executadas: string[] = [];
-  for (const automacao of (automacoesAtivas ?? []) as {
-    id: string;
-    nos: No[];
-    conexoes: Conexao[];
-    ultima_execucao: string | null;
-    criado_por: string | null;
-  }[]) {
-    const gatilho = (automacao.nos ?? []).find((n) => n.tipo === "gatilho_horario");
+  for (const automacao of (automacoesAtivas ?? []) as (Automacao & { ultima_execucao: string | null })[]) {
+    const gatilho = automacao.nos.find((n) => n.tipo === "gatilho_horario");
     const horaConfigurada = gatilho?.config?.hora as string | undefined;
-    if (!horaConfigurada) continue;
-
+    if (!gatilho || !horaConfigurada) continue;
     if (bucketDe5min(horaConfigurada) !== bucketAtual) continue;
 
     const ultimaExecucaoBrasil = automacao.ultima_execucao
@@ -491,7 +718,7 @@ Deno.serve(async (req) => {
       : null;
     if (ultimaExecucaoBrasil === dataISO) continue;
 
-    await executarAutomacao(db, automacao);
+    await registrarExecucao(db, automacao, gatilho.id, {});
     executadas.push(automacao.id);
   }
 
