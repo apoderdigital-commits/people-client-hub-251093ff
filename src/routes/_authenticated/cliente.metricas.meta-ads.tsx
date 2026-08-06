@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { Check, ChevronDown, ChevronLeft, Loader2, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, FileDown, ImageDown, Loader2, RefreshCw } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -22,6 +22,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Perfil } from "@/hooks/use-auth";
 import { useClienteSelecionado } from "@/lib/visao-cliente";
 import { sincronizarMetricasMeta } from "@/lib/clientes.functions";
+import { baixarComoPng } from "@/lib/exportar-relatorio";
 import {
   campanhasDe,
   intervalo,
@@ -99,12 +100,14 @@ function MetricasPage() {
       {(perfil) => (
         <VisaoClienteGate perfil={perfil}>
           <div className="min-h-screen bg-background">
-            <AppHeader perfil={perfil} />
-            <VisaoClienteBanner perfil={perfil} />
+            <div className="no-print">
+              <AppHeader perfil={perfil} />
+              <VisaoClienteBanner perfil={perfil} />
+            </div>
             <main className="mx-auto w-full max-w-6xl px-4 py-8">
               <Link
                 to="/cliente/metricas"
-                className="inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-brand"
+                className="no-print inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-brand"
               >
                 <ChevronLeft className="size-4" />
                 Voltar
@@ -121,6 +124,7 @@ function MetricasPage() {
 function Painel({ perfil }: { perfil: Perfil }) {
   const { cliente: selecionado, pronto } = useClienteSelecionado();
   const sincronizar = useServerFn(sincronizarMetricasMeta);
+  const relatorioRef = useRef<HTMLDivElement>(null);
 
   const [periodo, setPeriodo] = useState<PeriodoId>("30d");
   const [personalizado, setPersonalizado] = useState<Janela>(() => intervalo("30d"));
@@ -130,6 +134,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
   const [erro, setErro] = useState<string | null>(null);
   const [selecionadas, setSelecionadas] = useState<string[] | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
+  const [exportandoPng, setExportandoPng] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
   const clienteId = perfil.role === "agencia" ? (selecionado?.cliente_id ?? null) : perfil.cliente_id;
@@ -189,6 +194,16 @@ function Painel({ perfil }: { perfil: Perfil }) {
     void carregar();
   }, [carregar, pronto]);
 
+  async function exportarPng() {
+    if (!relatorioRef.current) return;
+    setExportandoPng(true);
+    try {
+      await baixarComoPng(relatorioRef.current, `meta-ads-${clienteId ?? "relatorio"}-${janela.desde}-a-${janela.ate}`);
+    } finally {
+      setExportandoPng(false);
+    }
+  }
+
   async function puxarDaMeta() {
     if (!clienteId) return;
     setSincronizando(true);
@@ -239,7 +254,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
 
   return (
     <>
-      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="no-print mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <h1 className="text-2xl font-bold text-ink sm:text-3xl">Meta Ads</h1>
         <div className="flex flex-wrap items-center gap-1.5">
           <FiltroCampanhas
@@ -272,11 +287,28 @@ function Painel({ perfil }: { perfil: Perfil }) {
               {sincronizando ? "Sincronizando…" : "Sincronizar"}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink"
+          >
+            <FileDown className="size-3.5" />
+            PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportarPng()}
+            disabled={exportandoPng}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink disabled:opacity-60"
+          >
+            {exportandoPng ? <Loader2 className="size-3.5 animate-spin" /> : <ImageDown className="size-3.5" />}
+            PNG
+          </button>
         </div>
       </div>
 
       {periodo === "personalizado" ? (
-        <div className="mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card px-4 py-3">
+        <div className="no-print mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card px-4 py-3">
           <label className="text-xs font-medium text-ink-muted">
             De
             <input
@@ -305,8 +337,8 @@ function Painel({ perfil }: { perfil: Perfil }) {
         </div>
       ) : null}
 
-      {erro ? <p className="mt-4 text-sm text-destructive">{erro}</p> : null}
-      {aviso ? <p className="mt-4 text-sm text-success">{aviso}</p> : null}
+      {erro ? <p className="no-print mt-4 text-sm text-destructive">{erro}</p> : null}
+      {aviso ? <p className="no-print mt-4 text-sm text-success">{aviso}</p> : null}
 
       {carregando ? (
         <div className="mt-10 grid place-items-center py-10">
@@ -324,7 +356,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
           ) : null}
         </div>
       ) : (
-        <>
+        <div ref={relatorioRef}>
           <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
             {kpis.map((id) => {
               const meta = METRICAS.find((m) => m.id === id);
@@ -341,7 +373,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
             })}
           </div>
 
-          <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
             <h2 className="text-base font-bold text-ink">Leads x Investimento</h2>
             <p className="text-sm text-ink-muted">Evolução diária no período selecionado.</p>
             <div className="mt-4 h-72 w-full">
@@ -396,7 +428,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
             </div>
           </section>
 
-          <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
             <h2 className="text-base font-bold text-ink">Campanhas</h2>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[560px] text-left text-sm">
@@ -438,7 +470,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
               ? " Presets terminam ontem, como no Gerenciador de Anúncios."
               : ""}
           </p>
-        </>
+        </div>
       )}
     </>
   );
@@ -516,7 +548,7 @@ function SegmentacaoDashboard({ clienteId, linhas }: { clienteId: string; linhas
   const semDados = dimensao !== "dia_semana" && dimensao !== "mes" && segmentado.length === 0;
 
   return (
-    <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+    <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
       <h2 className="text-base font-bold text-ink">Segmentações</h2>
       <p className="text-sm text-ink-muted">Investimento por segmento no período.</p>
 

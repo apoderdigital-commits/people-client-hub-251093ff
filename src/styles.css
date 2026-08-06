@@ -144,3 +144,29 @@
   opacity: 0.55;
   user-select: none;
 }
+
+/*
+ * Exportar relatório em PDF: usa a impressão nativa do navegador (Salvar
+ * como PDF), sem depender de nenhuma lib. `.no-print` esconde tudo que não
+ * faz sentido no papel — cabeçalho, botões, seletor de período.
+ */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  main {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .card-relatorio {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    break-inside: avoid;
+  }
+}

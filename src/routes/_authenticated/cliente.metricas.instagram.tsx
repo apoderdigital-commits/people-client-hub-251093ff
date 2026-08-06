@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
+import { ChevronLeft, FileDown, ImageDown, Loader2, RefreshCw } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -22,6 +22,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Perfil } from "@/hooks/use-auth";
 import { useClienteSelecionado } from "@/lib/visao-cliente";
 import { sincronizarMetricasInstagram } from "@/lib/clientes.functions";
+import { baixarComoPng } from "@/lib/exportar-relatorio";
+import { intervalo, janelaAnterior, PERIODOS, type Janela, type PeriodoId } from "@/lib/metricas";
 import {
   lerMetricasInstagramConfig,
   METRICAS_INSTAGRAM,
@@ -47,12 +49,6 @@ export const Route = createFileRoute("/_authenticated/cliente/metricas/instagram
 });
 
 const num = new Intl.NumberFormat("pt-BR");
-
-type PeriodoId = "7d" | "30d";
-const PERIODOS: { id: PeriodoId; label: string; dias: number }[] = [
-  { id: "7d", label: "7 dias", dias: 7 },
-  { id: "30d", label: "30 dias", dias: 30 },
-];
 
 type LinhaInstagram = {
   data: string;
@@ -99,37 +95,20 @@ function variacao(atual: number, anterior: number): number {
   return ((atual - anterior) / anterior) * 100;
 }
 
-/** Janela de N dias terminando ontem — mesmo critério do Meta Ads. */
-function intervalo(dias: number): { desde: string; ate: string } {
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const ate = new Date();
-  ate.setDate(ate.getDate() - 1);
-  const desde = new Date(ate);
-  desde.setDate(ate.getDate() - (dias - 1));
-  return { desde: iso(desde), ate: iso(ate) };
-}
-
-function janelaAnterior(janela: { desde: string; ate: string }, dias: number): { desde: string; ate: string } {
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const novoAte = new Date(`${janela.desde}T12:00:00`);
-  novoAte.setDate(novoAte.getDate() - 1);
-  const novoDesde = new Date(novoAte);
-  novoDesde.setDate(novoAte.getDate() - (dias - 1));
-  return { desde: iso(novoDesde), ate: iso(novoAte) };
-}
-
 function InstagramPage() {
   return (
     <ProtectedRoute role="cliente">
       {(perfil) => (
         <VisaoClienteGate perfil={perfil}>
           <div className="min-h-screen bg-background">
-            <AppHeader perfil={perfil} />
-            <VisaoClienteBanner perfil={perfil} />
+            <div className="no-print">
+              <AppHeader perfil={perfil} />
+              <VisaoClienteBanner perfil={perfil} />
+            </div>
             <main className="mx-auto w-full max-w-6xl px-4 py-8">
               <Link
                 to="/cliente/metricas"
-                className="inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-brand"
+                className="no-print inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-brand"
               >
                 <ChevronLeft className="size-4" />
                 Voltar
@@ -146,22 +125,34 @@ function InstagramPage() {
 function Painel({ perfil }: { perfil: Perfil }) {
   const { cliente: selecionado, pronto } = useClienteSelecionado();
   const sincronizar = useServerFn(sincronizarMetricasInstagram);
+  const relatorioRef = useRef<HTMLDivElement>(null);
 
   const [periodo, setPeriodo] = useState<PeriodoId>("30d");
+  const [personalizado, setPersonalizado] = useState<Janela>(() => intervalo("30d"));
   const [linhas, setLinhas] = useState<LinhaInstagram[]>([]);
   const [publicacoes, setPublicacoes] = useState<Publicacao[]>([]);
   const [kpis, setKpis] = useState<MetricaInstagramId[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
+  const [exportandoPng, setExportandoPng] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
   const clienteId = perfil.role === "agencia" ? (selecionado?.cliente_id ?? null) : perfil.cliente_id;
   const podeSincronizar = perfil.role === "agencia";
-  const dias = PERIODOS.find((p) => p.id === periodo)?.dias ?? 30;
 
-  const janela = useMemo(() => intervalo(dias), [dias]);
-  const janelaAnt = useMemo(() => janelaAnterior(janela, dias), [janela, dias]);
+  const janela = useMemo(() => intervalo(periodo, personalizado), [periodo, personalizado]);
+  const janelaAnt = useMemo(() => janelaAnterior(janela), [janela]);
+
+  async function exportarPng() {
+    if (!relatorioRef.current) return;
+    setExportandoPng(true);
+    try {
+      await baixarComoPng(relatorioRef.current, `instagram-${clienteId ?? "relatorio"}-${janela.desde}-a-${janela.ate}`);
+    } finally {
+      setExportandoPng(false);
+    }
+  }
 
   const carregar = useCallback(async () => {
     if (!clienteId) {
@@ -318,7 +309,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
 
   return (
     <>
-      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="no-print mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <h1 className="text-2xl font-bold text-ink sm:text-3xl">Instagram Business</h1>
         <div className="flex flex-wrap items-center gap-1.5">
           {PERIODOS.map((p) => (
@@ -346,11 +337,53 @@ function Painel({ perfil }: { perfil: Perfil }) {
               {sincronizando ? "Sincronizando…" : "Sincronizar"}
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink"
+          >
+            <FileDown className="size-3.5" />
+            PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportarPng()}
+            disabled={exportandoPng}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:text-ink disabled:opacity-60"
+          >
+            {exportandoPng ? <Loader2 className="size-3.5 animate-spin" /> : <ImageDown className="size-3.5" />}
+            PNG
+          </button>
         </div>
       </div>
 
-      {erro ? <p className="mt-4 text-sm text-destructive">{erro}</p> : null}
-      {aviso ? <p className="mt-4 text-sm text-success">{aviso}</p> : null}
+      {periodo === "personalizado" ? (
+        <div className="no-print mt-3 flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card px-4 py-3">
+          <label className="text-xs font-medium text-ink-muted">
+            De
+            <input
+              type="date"
+              value={personalizado.desde}
+              max={personalizado.ate}
+              onChange={(e) => setPersonalizado((j) => ({ ...j, desde: e.target.value }))}
+              className="mt-1 block rounded-lg border border-input bg-background px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
+            />
+          </label>
+          <label className="text-xs font-medium text-ink-muted">
+            Até
+            <input
+              type="date"
+              value={personalizado.ate}
+              min={personalizado.desde}
+              onChange={(e) => setPersonalizado((j) => ({ ...j, ate: e.target.value }))}
+              className="mt-1 block rounded-lg border border-input bg-background px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {erro ? <p className="no-print mt-4 text-sm text-destructive">{erro}</p> : null}
+      {aviso ? <p className="no-print mt-4 text-sm text-success">{aviso}</p> : null}
 
       {carregando ? (
         <div className="mt-10 grid place-items-center py-10">
@@ -368,8 +401,11 @@ function Painel({ perfil }: { perfil: Perfil }) {
           ) : null}
         </div>
       ) : (
-        <>
-          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div ref={relatorioRef}>
+          <p className="mb-2 text-xs text-ink-muted">
+            Período: {diaCurto(janela.desde)} a {diaCurto(janela.ate)}.
+          </p>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {kpis.map((id) => {
               const meta = METRICAS_INSTAGRAM.find((m) => m.id === id);
               if (!meta) return null;
@@ -385,7 +421,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
             })}
           </div>
 
-          <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
             <h2 className="text-base font-bold text-ink">Seguidores x Alcance</h2>
             <p className="text-sm text-ink-muted">Evolução diária no período selecionado.</p>
             <div className="mt-4 h-72 w-full">
@@ -440,7 +476,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
             </div>
           </section>
 
-          <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+          <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
             <h2 className="text-base font-bold text-ink">Publicações recentes</h2>
             {publicacoes.length === 0 ? (
               <p className="mt-3 text-sm text-ink-muted">Nenhuma publicação sincronizada ainda.</p>
@@ -489,7 +525,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
           </section>
 
           <AudienciaInstagram clienteId={clienteId} />
-        </>
+        </div>
       )}
     </>
   );
@@ -555,7 +591,7 @@ function AudienciaInstagram({ clienteId }: { clienteId: string }) {
 
   return (
     <>
-      <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+      <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
         <h2 className="text-base font-bold text-ink">Demografia da audiência</h2>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {ABAS_DEMOGRAFIA.map((a) => (
@@ -606,7 +642,7 @@ function AudienciaInstagram({ clienteId }: { clienteId: string }) {
         )}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
+      <section className="card-relatorio mt-6 rounded-2xl border border-border bg-card p-5 shadow-card">
         <h2 className="text-base font-bold text-ink">Horários mais ativos dos seguidores</h2>
         <p className="text-sm text-ink-muted">Melhores horários pra postar, por hora do dia.</p>
         {dadosHorarios.length === 0 ? (
