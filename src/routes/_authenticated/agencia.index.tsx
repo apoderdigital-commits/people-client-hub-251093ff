@@ -7,6 +7,7 @@ import {
   Megaphone,
   ShieldCheck,
   Users,
+  Zap,
 } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { MenuCard } from "@/components/MenuCard";
@@ -84,6 +85,16 @@ function AgenciaMenu() {
                   cor="teal"
                   badge="Ativo"
                   to="/agencia/equipe"
+                />
+              ) : null}
+              {ehAdminEquipe(perfil.equipe_role) ? (
+                <MenuCard
+                  titulo="Automações"
+                  descricao="Monte rotinas com gatilhos e ações que rodam sozinhas, sem precisar clicar em nada."
+                  icone={Zap}
+                  cor="pink"
+                  badge="Ativo"
+                  to="/agencia/automacoes"
                 />
               ) : null}
 

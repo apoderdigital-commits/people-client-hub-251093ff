@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   AlertTriangle,
   ArrowDown,
+  ArrowLeft,
   ArrowUp,
   Check,
   ChevronDown,
@@ -122,7 +123,14 @@ function ConfigurarClientes() {
         <div className="min-h-screen bg-background">
           <AppHeader perfil={perfil} />
           <main className="mx-auto w-full max-w-[880px] px-4 py-8 sm:py-12">
-            <div className="flex items-center gap-3">
+            <Link
+              to="/agencia"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+            >
+              <ArrowLeft className="size-4" />
+              Voltar ao menu
+            </Link>
+            <div className="mt-4 flex items-center gap-3">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-card-violet">
                 <Users className="size-5 text-brand-foreground" strokeWidth={2.2} />
               </span>
