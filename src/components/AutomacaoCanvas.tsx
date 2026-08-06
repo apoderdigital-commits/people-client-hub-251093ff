@@ -144,19 +144,19 @@ function resumoDoNo(tipo: TipoNo, config: Record<string, unknown>, colunas: Colu
   const nomeColuna = (id: unknown) => colunas.find((c) => c.id === id)?.nome ?? "?";
   switch (tipo) {
     case "gatilho_horario":
-      return (config.hora as string) ?? "09:00";
+      return (config["hora"] as string) ?? "09:00";
     case "gatilho_cartao_movido":
-      return config.colunaDestino ? `entra em "${nomeColuna(config.colunaDestino)}"` : "configure a coluna";
+      return config["colunaDestino"] ? `entra em "${nomeColuna(config["colunaDestino"])}"` : "configure a coluna";
     case "gatilho_cartao_criado":
       return "qualquer cartão novo";
     case "logica_se":
-      return config.campo ? `${config.campo} ${config.operador ?? "igual"} "${config.valor ?? ""}"` : "configure a condição";
+      return config["campo"] ? `${config["campo"]} ${config["operador"] ?? "igual"} "${config["valor"] ?? ""}"` : "configure a condição";
     case "acao_mover_cartao":
-      return config.colunaDestino ? `para "${nomeColuna(config.colunaDestino)}"` : "configure a coluna";
+      return config["colunaDestino"] ? `para "${nomeColuna(config["colunaDestino"])}"` : "configure a coluna";
     case "acao_criar_cartao":
-      return config.colunaCriacao ? `em "${nomeColuna(config.colunaCriacao)}"` : "configure a coluna";
+      return config["colunaCriacao"] ? `em "${nomeColuna(config["colunaCriacao"])}"` : "configure a coluna";
     case "acao_whatsapp":
-      return config.credencialId ? "credencial configurada" : "configure a credencial";
+      return config["credencialId"] ? "credencial configurada" : "configure a credencial";
     default:
       return "";
   }
@@ -291,7 +291,7 @@ export function AutomacaoEditor({ perfil, automacaoId }: { perfil: Perfil; autom
               id: `e-${i}-${c.origem}-${c.destino}`,
               source: c.origem,
               target: c.destino,
-              sourceHandle: c.origemHandle,
+              sourceHandle: c.origemHandle ?? null,
             })),
           );
         }
@@ -639,7 +639,7 @@ function ModalConfigNo({
               <span className="text-xs font-medium text-ink-muted">Horário (Brasília)</span>
               <input
                 type="time"
-                value={(config.hora as string) ?? "09:00"}
+                value={(config["hora"] as string) ?? "09:00"}
                 onChange={(e) => campo("hora", e.target.value)}
                 className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
               />
@@ -652,7 +652,7 @@ function ModalConfigNo({
                 {dados.tipo === "gatilho_cartao_movido" ? "Quando o cartão entrar em" : "Mover o cartão para"}
               </span>
               <select
-                value={(config.colunaDestino as string) ?? ""}
+                value={(config["colunaDestino"] as string) ?? ""}
                 onChange={(e) => campo("colunaDestino", e.target.value)}
                 className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
               >
@@ -675,7 +675,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Campo</span>
                 <select
-                  value={(config.campo as string) ?? ""}
+                  value={(config["campo"] as string) ?? ""}
                   onChange={(e) => campo("campo", e.target.value)}
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                 >
@@ -688,7 +688,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Condição</span>
                 <select
-                  value={(config.operador as string) ?? "igual"}
+                  value={(config["operador"] as string) ?? "igual"}
                   onChange={(e) => campo("operador", e.target.value)}
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                 >
@@ -700,7 +700,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Valor</span>
                 <input
-                  value={(config.valor as string) ?? ""}
+                  value={(config["valor"] as string) ?? ""}
                   onChange={(e) => campo("valor", e.target.value)}
                   placeholder="Ex.: Unid Imóveis"
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
@@ -718,7 +718,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Criar na coluna</span>
                 <select
-                  value={(config.colunaCriacao as string) ?? ""}
+                  value={(config["colunaCriacao"] as string) ?? ""}
                   onChange={(e) => campo("colunaCriacao", e.target.value)}
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                 >
@@ -733,7 +733,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Título do cartão</span>
                 <input
-                  value={(config.tituloTemplate as string) ?? ""}
+                  value={(config["tituloTemplate"] as string) ?? ""}
                   onChange={(e) => campo("tituloTemplate", e.target.value)}
                   placeholder="Ex.: Novo pedido — {{cliente}}"
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
@@ -750,7 +750,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Credencial (Evolution API)</span>
                 <select
-                  value={(config.credencialId as string) ?? ""}
+                  value={(config["credencialId"] as string) ?? ""}
                   onChange={(e) => campo("credencialId", e.target.value)}
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                 >
@@ -784,7 +784,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Número (com DDI/DDD, só dígitos)</span>
                 <input
-                  value={(config.numeroTemplate as string) ?? ""}
+                  value={(config["numeroTemplate"] as string) ?? ""}
                   onChange={(e) => campo("numeroTemplate", e.target.value)}
                   placeholder="Ex.: 5511999999999"
                   className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
@@ -793,7 +793,7 @@ function ModalConfigNo({
               <label className="block">
                 <span className="text-xs font-medium text-ink-muted">Mensagem</span>
                 <textarea
-                  value={(config.mensagemTemplate as string) ?? ""}
+                  value={(config["mensagemTemplate"] as string) ?? ""}
                   onChange={(e) => campo("mensagemTemplate", e.target.value)}
                   rows={3}
                   placeholder="Ex.: Novo conteúdo aguardando aprovação: {{titulo}}"
