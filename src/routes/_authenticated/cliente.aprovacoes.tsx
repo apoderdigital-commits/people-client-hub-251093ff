@@ -6,6 +6,9 @@ import { AppHeader } from "@/components/AppHeader";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { VisaoClienteBanner, VisaoClienteGate } from "@/components/VisaoCliente";
 import { listarAprovacoesPendentes, responderAprovacao } from "@/lib/aprovacao.functions";
+import { ehAdminEquipe } from "@/lib/equipe";
+import { useClienteSelecionado } from "@/lib/visao-cliente";
+import type { Perfil } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/cliente/aprovacoes")({
   head: () => ({
@@ -41,39 +44,62 @@ function ehImagem(nome: string): boolean {
 function AprovacoesPage() {
   return (
     <ProtectedRoute role="cliente">
-      {(perfil) => (
-        <VisaoClienteGate perfil={perfil}>
-          <div className="min-h-screen bg-background">
-            <AppHeader perfil={perfil} />
-            <VisaoClienteBanner perfil={perfil} />
-            <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
-              <Link
-                to="/cliente"
-                className="inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-brand"
-              >
-                <ChevronLeft className="size-4" />
-                Voltar
-              </Link>
-              <Painel />
-            </main>
-          </div>
-        </VisaoClienteGate>
-      )}
+      {(perfil) => {
+        if (perfil.role === "agencia" && !ehAdminEquipe(perfil.equipe_role)) {
+          return (
+            <div className="min-h-screen bg-background">
+              <AppHeader perfil={perfil} />
+              <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
+                <p className="mt-6 rounded-2xl border border-border bg-card px-4 py-6 text-sm text-ink-muted shadow-card">
+                  Apenas super admin e admin podem acessar as aprovações dos clientes.
+                </p>
+              </main>
+            </div>
+          );
+        }
+
+        return (
+          <VisaoClienteGate perfil={perfil}>
+            <div className="min-h-screen bg-background">
+              <AppHeader perfil={perfil} />
+              <VisaoClienteBanner perfil={perfil} />
+              <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
+                <Link
+                  to="/cliente"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-ink-muted transition-colors hover:text-brand"
+                >
+                  <ChevronLeft className="size-4" />
+                  Voltar
+                </Link>
+                <Painel perfil={perfil} />
+              </main>
+            </div>
+          </VisaoClienteGate>
+        );
+      }}
     </ProtectedRoute>
   );
 }
 
-function Painel() {
+function Painel({ perfil }: { perfil: Perfil }) {
+  const { cliente: selecionado, pronto } = useClienteSelecionado();
   const listar = useServerFn(listarAprovacoesPendentes);
   const [cartoes, setCartoes] = useState<CartaoAprovacao[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
+  const clienteId = perfil.role === "agencia" ? (selecionado?.cliente_id ?? null) : perfil.cliente_id;
+  const clienteIdParaServidor = perfil.role === "agencia" ? (clienteId ?? undefined) : undefined;
+
   const carregar = useCallback(async () => {
+    if (!clienteId) {
+      setCarregando(false);
+      return;
+    }
     setCarregando(true);
     try {
-      const res = await listar({ data: {} });
+      const res = await listar({ data: { clienteId: clienteIdParaServidor } });
       setCartoes(res.cartoes as CartaoAprovacao[]);
       setAnexos(res.anexos as Anexo[]);
       setErro(null);
@@ -81,14 +107,23 @@ function Painel() {
       setErro(err instanceof Error ? err.message : "Não foi possível carregar.");
     }
     setCarregando(false);
-  }, [listar]);
+  }, [listar, clienteId, clienteIdParaServidor]);
 
   useEffect(() => {
+    if (!pronto) return;
     void carregar();
-  }, [carregar]);
+  }, [carregar, pronto]);
 
   function remover(id: string) {
     setCartoes((atual) => atual.filter((c) => c.id !== id));
+  }
+
+  if (!clienteId) {
+    return (
+      <p className="mt-8 rounded-2xl border border-border bg-card px-4 py-6 text-sm text-ink-muted shadow-card">
+        Sua conta ainda não está vinculada a um cliente. Fale com a agência.
+      </p>
+    );
   }
 
   return (
@@ -107,7 +142,7 @@ function Painel() {
       ) : cartoes.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-border bg-card p-8 text-center shadow-card">
           <p className="text-sm text-ink-muted">
-            Nenhum conteúdo aguardando sua aprovação no momento.
+            Nenhum conteúdo aguardando aprovação no momento.
           </p>
         </div>
       ) : (
@@ -117,6 +152,7 @@ function Painel() {
               key={cartao.id}
               cartao={cartao}
               anexos={anexos.filter((a) => a.cartao_id === cartao.id)}
+              clienteIdParaServidor={clienteIdParaServidor}
               onRespondido={() => remover(cartao.id)}
             />
           ))}
@@ -129,10 +165,12 @@ function Painel() {
 function CartaoAprovacaoCard({
   cartao,
   anexos,
+  clienteIdParaServidor,
   onRespondido,
 }: {
   cartao: CartaoAprovacao;
   anexos: Anexo[];
+  clienteIdParaServidor: string | undefined;
   onRespondido: () => void;
 }) {
   const responder = useServerFn(responderAprovacao);
@@ -146,11 +184,16 @@ function CartaoAprovacaoCard({
     setErro(null);
     try {
       await responder({
-        data: { cartaoId: cartao.id, decisao, motivo: motivo.trim() || undefined },
+        data: {
+          cartaoId: cartao.id,
+          decisao,
+          motivo: motivo.trim() || undefined,
+          clienteId: clienteIdParaServidor,
+        },
       });
       onRespondido();
     } catch (err) {
-      setErro(err instanceof Error ? err.message : "Não foi possível registrar sua resposta.");
+      setErro(err instanceof Error ? err.message : "Não foi possível registrar a resposta.");
       setEnviando(null);
     }
   }

@@ -2,12 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ehAdminEquipe, type EquipeRole } from "@/lib/equipe";
 
 /**
  * Tudo aqui passa pela service role de propósito: o cliente não tem (e não
  * deve ter) acesso direto a `fluxo_cartoes` via RLS — só a equipe. Em vez de
- * abrir uma política nova e arriscar o cliente enxergar ou mover cartões que
- * não são dele, cada ação valida explicitamente o dono do cartão aqui.
+ * abrir uma política nova e arriscar alguém enxergar ou mover cartões que não
+ * são dele, cada ação valida explicitamente o dono do cartão aqui.
  */
 async function admin(): Promise<SupabaseClient> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -18,27 +19,58 @@ const NOME_COLUNA_REVISAO = "Revisão do Cliente";
 const NOME_COLUNA_APROVADO = "Agendar";
 const NOME_COLUNA_REPROVADO = "Apresentação";
 
-const vazioSchema = z.object({}).optional();
+const listarSchema = z.object({ clienteId: z.string().uuid().optional() });
 
 const responderSchema = z.object({
   cartaoId: z.string().uuid(),
   decisao: z.enum(["aprovado", "reprovado"]),
   motivo: z.string().trim().max(2000).optional(),
+  clienteId: z.string().uuid().optional(),
 });
 
-type Perfil = { id: string; role: string; cliente_id: string | null };
+type PerfilBruto = {
+  id: string;
+  role: string;
+  cliente_id: string | null;
+  equipe_role: EquipeRole | null;
+};
 
-async function perfilDoCliente(db: SupabaseClient, userId: string): Promise<Perfil> {
+/**
+ * Resolve de qual cliente a pessoa logada pode ver/mexer nas aprovações:
+ * - conta de cliente → sempre o próprio `cliente_id`, nunca o que vier do
+ *   front (evita um cliente pedir o `clienteId` de outro);
+ * - super admin / admin da equipe → o cliente que escolheram visualizar em
+ *   "Visualizar como cliente" (`clienteId` vem do front, mas só esses dois
+ *   níveis passam);
+ * - qualquer outro papel da equipe → sem acesso, como pedido.
+ */
+async function resolverAcesso(
+  db: SupabaseClient,
+  userId: string,
+  clienteIdSolicitado: string | undefined,
+): Promise<{ clienteId: string; perfilId: string }> {
   const { data } = await db
     .from("profiles")
-    .select("id, role, cliente_id")
+    .select("id, role, cliente_id, equipe_role")
     .eq("id", userId)
     .maybeSingle();
-  const perfil = data as Perfil | null;
-  if (!perfil || perfil.role !== "cliente" || !perfil.cliente_id) {
-    throw new Error("Apenas contas de cliente vinculadas a um cliente têm aprovações.");
+  const perfil = data as PerfilBruto | null;
+  if (!perfil) throw new Error("Perfil não encontrado.");
+
+  if (perfil.role === "cliente") {
+    if (!perfil.cliente_id) throw new Error("Sua conta ainda não está vinculada a um cliente.");
+    return { clienteId: perfil.cliente_id, perfilId: perfil.id };
   }
-  return perfil;
+
+  if (perfil.role === "agencia") {
+    if (!ehAdminEquipe(perfil.equipe_role)) {
+      throw new Error("Apenas super admin e admin podem acessar as aprovações dos clientes.");
+    }
+    if (!clienteIdSolicitado) throw new Error("Selecione um cliente para ver as aprovações.");
+    return { clienteId: clienteIdSolicitado, perfilId: perfil.id };
+  }
+
+  throw new Error("Sem acesso às aprovações.");
 }
 
 async function idDaColuna(db: SupabaseClient, nome: string): Promise<string> {
@@ -52,19 +84,19 @@ async function idDaColuna(db: SupabaseClient, nome: string): Promise<string> {
   return id;
 }
 
-/** Cartões do cliente autenticado que estão aguardando aprovação dele. */
+/** Cartões aguardando aprovação do cliente informado (ou do próprio cliente logado). */
 export const listarAprovacoesPendentes = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => vazioSchema.parse(data))
-  .handler(async ({ context }) => {
+  .inputValidator((data: unknown) => listarSchema.parse(data ?? {}))
+  .handler(async ({ data, context }) => {
     const db = await admin();
-    const perfil = await perfilDoCliente(db, context.userId);
+    const acesso = await resolverAcesso(db, context.userId, data.clienteId);
     const colunaId = await idDaColuna(db, NOME_COLUNA_REVISAO);
 
     const { data: cartoesBrutos, error } = await db
       .from("fluxo_cartoes")
       .select("id, titulo, descricao, prazo, created_at")
-      .eq("cliente_id", perfil.cliente_id)
+      .eq("cliente_id", acesso.clienteId)
       .eq("coluna_id", colunaId)
       .order("created_at");
     if (error) throw new Error("Não foi possível carregar os conteúdos para aprovação.");
@@ -96,16 +128,16 @@ export const listarAprovacoesPendentes = createServerFn({ method: "POST" })
   });
 
 /**
- * Aprova ou reprova um conteúdo, movendo o cartão pro destino certo. Se o
- * cliente reprovar, o motivo (opcional) vira um comentário no cartão, pra
- * quem for ajustar já saber o que mudar sem precisar perguntar de novo.
+ * Aprova ou reprova um conteúdo, movendo o cartão pro destino certo. Se
+ * reprovado, o motivo (opcional) vira um comentário no cartão, pra quem for
+ * ajustar já saber o que mudar sem precisar perguntar de novo.
  */
 export const responderAprovacao = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => responderSchema.parse(data))
   .handler(async ({ data, context }) => {
     const db = await admin();
-    const perfil = await perfilDoCliente(db, context.userId);
+    const acesso = await resolverAcesso(db, context.userId, data.clienteId);
 
     const { data: cartaoBruto } = await db
       .from("fluxo_cartoes")
@@ -114,13 +146,13 @@ export const responderAprovacao = createServerFn({ method: "POST" })
       .maybeSingle();
     const cartao = cartaoBruto as { id: string; cliente_id: string | null; coluna_id: string } | null;
     if (!cartao) throw new Error("Conteúdo não encontrado.");
-    if (cartao.cliente_id !== perfil.cliente_id) {
-      throw new Error("Esse conteúdo não pertence à sua conta.");
+    if (cartao.cliente_id !== acesso.clienteId) {
+      throw new Error("Esse conteúdo não pertence a este cliente.");
     }
 
     const colunaRevisao = await idDaColuna(db, NOME_COLUNA_REVISAO);
     if (cartao.coluna_id !== colunaRevisao) {
-      throw new Error("Esse conteúdo não está mais aguardando sua aprovação.");
+      throw new Error("Esse conteúdo não está mais aguardando aprovação.");
     }
 
     const destino =
@@ -129,14 +161,14 @@ export const responderAprovacao = createServerFn({ method: "POST" })
         : await idDaColuna(db, NOME_COLUNA_REPROVADO);
 
     const { error } = await db.from("fluxo_cartoes").update({ coluna_id: destino }).eq("id", cartao.id);
-    if (error) throw new Error("Não foi possível registrar sua resposta.");
+    if (error) throw new Error("Não foi possível registrar a resposta.");
 
     const textoBase =
       data.decisao === "aprovado" ? "Conteúdo aprovado pelo cliente." : "Conteúdo reprovado pelo cliente.";
     const texto = data.motivo ? `${textoBase}\n\n${data.motivo}` : textoBase;
     await db.from("fluxo_comentarios").insert({
       cartao_id: cartao.id,
-      autor_id: perfil.id,
+      autor_id: acesso.perfilId,
       texto,
     });
 
