@@ -97,8 +97,9 @@ export async function buscarInsightsConta(
   ate: string,
 ): Promise<{ diarios: InsightContaDiario[]; deltasSeguidores: Record<string, number> }> {
   const url = new URL(`${BASE}/${igUserId}/insights`);
-  url.searchParams.set("metric", "reach,profile_views,follower_count");
+  url.searchParams.set("metric", "reach,follower_count");
   url.searchParams.set("period", "day");
+  url.searchParams.set("metric_type", "time_series");
   url.searchParams.set("since", desde);
   url.searchParams.set("until", ate);
   url.searchParams.set("access_token", token);
@@ -115,19 +116,40 @@ export async function buscarInsightsConta(
   }
 
   const alcancePorDia = porMetrica.get("reach") ?? new Map<string, number>();
-  const visitasPorDia = porMetrica.get("profile_views") ?? new Map<string, number>();
   const deltasSeguidores = Object.fromEntries(porMetrica.get("follower_count") ?? new Map());
 
-  const dias = new Set<string>([
-    ...alcancePorDia.keys(),
-    ...visitasPorDia.keys(),
-    ...Object.keys(deltasSeguidores),
-  ]);
+  const dias = new Set<string>([...alcancePorDia.keys(), ...Object.keys(deltasSeguidores)]);
+  if (dias.size === 0) dias.add(ate);
+
+  /**
+   * `profile_views` não aceita mais série diária (metric_type=time_series) —
+   * só devolve um total agregado do período inteiro (total_value). Sem
+   * quebra por dia, o total é gravado no último dia da janela; os cards de
+   * KPI somam o período inteiro mesmo, então o total bate certo lá.
+   */
+  let visitasTotal = 0;
+  try {
+    const urlTotal = new URL(`${BASE}/${igUserId}/insights`);
+    urlTotal.searchParams.set("metric", "profile_views");
+    urlTotal.searchParams.set("period", "day");
+    urlTotal.searchParams.set("metric_type", "total_value");
+    urlTotal.searchParams.set("since", desde);
+    urlTotal.searchParams.set("until", ate);
+    urlTotal.searchParams.set("access_token", token);
+    const corpoTotal = await pedir<{ data?: { total_value?: { value?: number } }[] }>(
+      urlTotal.toString(),
+    );
+    visitasTotal = corpoTotal.data?.[0]?.total_value?.value ?? 0;
+  } catch {
+    visitasTotal = 0;
+  }
+
+  const ultimoDia = [...dias].sort().at(-1) ?? ate;
 
   const diarios = [...dias].sort().map((data) => ({
     data,
     alcance: alcancePorDia.get(data) ?? 0,
-    visitasPerfil: visitasPorDia.get(data) ?? 0,
+    visitasPerfil: data === ultimoDia ? visitasTotal : 0,
   }));
 
   return { diarios, deltasSeguidores };
