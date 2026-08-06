@@ -16,6 +16,7 @@ import { Route as AuthenticatedAgenciaClientesRouteImport } from './routes/_auth
 import { Route as AuthenticatedAgenciaEquipeRouteImport } from './routes/_authenticated/agencia.equipe'
 import { Route as AuthenticatedAgenciaVisualizarRouteImport } from './routes/_authenticated/agencia.visualizar'
 import { Route as AuthenticatedClienteIndexRouteImport } from './routes/_authenticated/cliente.index'
+import { Route as AuthenticatedClienteAprovacoesRouteImport } from './routes/_authenticated/cliente.aprovacoes'
 import { Route as AuthenticatedClienteMetricasIndexRouteImport } from './routes/_authenticated/cliente.metricas.index'
 import { Route as AuthenticatedClienteMetricasMetaAdsRouteImport } from './routes/_authenticated/cliente.metricas.meta-ads'
 import { Route as AuthenticatedClienteMetricasInstagramRouteImport } from './routes/_authenticated/cliente.metricas.instagram'
@@ -59,6 +60,12 @@ const AuthenticatedClienteIndexRoute =
     path: '/cliente/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedClienteAprovacoesRoute =
+  AuthenticatedClienteAprovacoesRouteImport.update({
+    id: '/cliente/aprovacoes',
+    path: '/cliente/aprovacoes',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedClienteMetricasIndexRoute =
   AuthenticatedClienteMetricasIndexRouteImport.update({
     id: '/cliente/metricas/',
@@ -83,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
+  '/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
   '/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/agencia/': typeof AuthenticatedAgenciaIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesByTo {
   '/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
+  '/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
   '/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/agencia': typeof AuthenticatedAgenciaIndexRoute
@@ -107,6 +116,7 @@ export interface FileRoutesById {
   '/_authenticated/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/_authenticated/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/_authenticated/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
+  '/_authenticated/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/_authenticated/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
   '/_authenticated/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/_authenticated/agencia/': typeof AuthenticatedAgenciaIndexRoute
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/agencia/clientes'
     | '/agencia/equipe'
     | '/agencia/visualizar'
+    | '/cliente/aprovacoes'
     | '/cliente/metricas/meta-ads'
     | '/cliente/metricas/instagram'
     | '/agencia/'
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/agencia/clientes'
     | '/agencia/equipe'
     | '/agencia/visualizar'
+    | '/cliente/aprovacoes'
     | '/cliente/metricas/meta-ads'
     | '/cliente/metricas/instagram'
     | '/agencia'
@@ -143,6 +155,7 @@ export interface FileRouteTypes {
     | '/_authenticated/agencia/clientes'
     | '/_authenticated/agencia/equipe'
     | '/_authenticated/agencia/visualizar'
+    | '/_authenticated/cliente/aprovacoes'
     | '/_authenticated/cliente/metricas/meta-ads'
     | '/_authenticated/cliente/metricas/instagram'
     | '/_authenticated/agencia/'
@@ -206,6 +219,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClienteIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/cliente/aprovacoes': {
+      id: '/_authenticated/cliente/aprovacoes'
+      path: '/cliente/aprovacoes'
+      fullPath: '/cliente/aprovacoes'
+      preLoaderRoute: typeof AuthenticatedClienteAprovacoesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/cliente/metricas/': {
       id: '/_authenticated/cliente/metricas/'
       path: '/cliente/metricas'
@@ -234,6 +254,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgenciaClientesRoute: typeof AuthenticatedAgenciaClientesRoute
   AuthenticatedAgenciaEquipeRoute: typeof AuthenticatedAgenciaEquipeRoute
   AuthenticatedAgenciaVisualizarRoute: typeof AuthenticatedAgenciaVisualizarRoute
+  AuthenticatedClienteAprovacoesRoute: typeof AuthenticatedClienteAprovacoesRoute
   AuthenticatedClienteMetricasMetaAdsRoute: typeof AuthenticatedClienteMetricasMetaAdsRoute
   AuthenticatedClienteMetricasInstagramRoute: typeof AuthenticatedClienteMetricasInstagramRoute
   AuthenticatedAgenciaIndexRoute: typeof AuthenticatedAgenciaIndexRoute
@@ -245,6 +266,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgenciaClientesRoute: AuthenticatedAgenciaClientesRoute,
   AuthenticatedAgenciaEquipeRoute: AuthenticatedAgenciaEquipeRoute,
   AuthenticatedAgenciaVisualizarRoute: AuthenticatedAgenciaVisualizarRoute,
+  AuthenticatedClienteAprovacoesRoute: AuthenticatedClienteAprovacoesRoute,
   AuthenticatedClienteMetricasMetaAdsRoute: AuthenticatedClienteMetricasMetaAdsRoute,
   AuthenticatedClienteMetricasInstagramRoute: AuthenticatedClienteMetricasInstagramRoute,
   AuthenticatedAgenciaIndexRoute: AuthenticatedAgenciaIndexRoute,

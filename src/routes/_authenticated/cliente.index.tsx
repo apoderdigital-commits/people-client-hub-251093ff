@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { BarChart3, FileText, Image, MessageCircle, Wallet } from "lucide-react";
+import { BarChart3, ClipboardCheck, FileText, MessageCircle, Wallet } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { MenuCard } from "@/components/MenuCard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -11,7 +11,7 @@ export const Route = createFileRoute("/_authenticated/cliente/")({
       { title: "Área do Cliente — people" },
       {
         name: "description",
-        content: "Escolha o que analisar hoje: métricas, criativos, relatórios, financeiro e suporte.",
+        content: "Escolha o que analisar hoje: métricas, aprovações, relatórios, financeiro e suporte.",
       },
       { property: "og:title", content: "Área do Cliente — people" },
       {
@@ -49,11 +49,12 @@ function ClienteMenu() {
                 to="/cliente/metricas"
               />
               <MenuCard
-                comingSoon
-                titulo="Criativos"
-                descricao="Veja os criativos em produção e aprovados para as suas campanhas."
-                icone={Image}
+                titulo="Aprovação de Conteúdos"
+                descricao="Revise os conteúdos preparados pela equipe e aprove ou peça ajustes."
+                icone={ClipboardCheck}
                 cor="pink"
+                badge="Ativo"
+                to="/cliente/aprovacoes"
               />
               <MenuCard
                 comingSoon
