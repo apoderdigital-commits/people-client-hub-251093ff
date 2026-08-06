@@ -22,10 +22,14 @@ function traduzirErro(erro: ErroMeta): string {
     return "Token da Meta inválido ou expirado. Gere um novo token e salve novamente.";
   }
   if (codigo === 100) {
-    return "Conta do Instagram Business não encontrada. Confira o ID.";
+    // A Meta devolve este código tanto para ID inválido quanto para falta de
+    // permissão sobre a conta — a mensagem genérica escondia qual dos dois
+    // era. Repassar o texto original é o único jeito confiável de diferenciar.
+    const detalhe = erro.message ? ` (${erro.message})` : "";
+    return `A Meta recusou o pedido${detalhe}. Confira o ID e se o Usuário do Sistema tem acesso a esta conta do Instagram na Central de Negócios.`;
   }
   if (codigo === 200 || codigo === 10) {
-    return "O token não tem permissão para ler esta conta do Instagram (são necessários os escopos instagram_basic e instagram_manage_insights).";
+    return "O token não tem permissão para ler esta conta do Instagram (são necessários os escopos instagram_basic e instagram_manage_insights, e o Usuário do Sistema precisa estar atribuído a essa conta do Instagram na Central de Negócios).";
   }
   if (codigo === 17 || codigo === 4 || codigo === 613) {
     return "Limite de requisições da Meta atingido. Tente novamente em alguns minutos.";
