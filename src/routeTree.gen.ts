@@ -16,6 +16,7 @@ import { Route as AuthenticatedAgenciaClientesRouteImport } from './routes/_auth
 import { Route as AuthenticatedAgenciaEquipeRouteImport } from './routes/_authenticated/agencia.equipe'
 import { Route as AuthenticatedAgenciaFluxoRouteImport } from './routes/_authenticated/agencia.fluxo'
 import { Route as AuthenticatedAgenciaVisualizarRouteImport } from './routes/_authenticated/agencia.visualizar'
+import { Route as AuthenticatedAgenciaMetricasRouteImport } from './routes/_authenticated/agencia.metricas'
 import { Route as AuthenticatedClienteIndexRouteImport } from './routes/_authenticated/cliente.index'
 import { Route as AuthenticatedClienteAprovacoesRouteImport } from './routes/_authenticated/cliente.aprovacoes'
 import { Route as AuthenticatedAgenciaAutomacoesIndexRouteImport } from './routes/_authenticated/agencia.automacoes.index'
@@ -61,6 +62,12 @@ const AuthenticatedAgenciaVisualizarRoute =
   AuthenticatedAgenciaVisualizarRouteImport.update({
     id: '/agencia/visualizar',
     path: '/agencia/visualizar',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAgenciaMetricasRoute =
+  AuthenticatedAgenciaMetricasRouteImport.update({
+    id: '/agencia/metricas',
+    path: '/agencia/metricas',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedClienteIndexRoute =
@@ -112,6 +119,7 @@ export interface FileRoutesByFullPath {
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/fluxo': typeof AuthenticatedAgenciaFluxoRoute
   '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
+  '/agencia/metricas': typeof AuthenticatedAgenciaMetricasRoute
   '/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/agencia/': typeof AuthenticatedAgenciaIndexRoute
   '/cliente/': typeof AuthenticatedClienteIndexRoute
@@ -127,6 +135,7 @@ export interface FileRoutesByTo {
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/fluxo': typeof AuthenticatedAgenciaFluxoRoute
   '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
+  '/agencia/metricas': typeof AuthenticatedAgenciaMetricasRoute
   '/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/agencia': typeof AuthenticatedAgenciaIndexRoute
   '/cliente': typeof AuthenticatedClienteIndexRoute
@@ -144,6 +153,7 @@ export interface FileRoutesById {
   '/_authenticated/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/_authenticated/agencia/fluxo': typeof AuthenticatedAgenciaFluxoRoute
   '/_authenticated/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
+  '/_authenticated/agencia/metricas': typeof AuthenticatedAgenciaMetricasRoute
   '/_authenticated/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/_authenticated/agencia/': typeof AuthenticatedAgenciaIndexRoute
   '/_authenticated/cliente/': typeof AuthenticatedClienteIndexRoute
@@ -161,6 +171,7 @@ export interface FileRouteTypes {
     | '/agencia/equipe'
     | '/agencia/fluxo'
     | '/agencia/visualizar'
+    | '/agencia/metricas'
     | '/cliente/aprovacoes'
     | '/agencia/'
     | '/cliente/'
@@ -176,6 +187,7 @@ export interface FileRouteTypes {
     | '/agencia/equipe'
     | '/agencia/fluxo'
     | '/agencia/visualizar'
+    | '/agencia/metricas'
     | '/cliente/aprovacoes'
     | '/agencia'
     | '/cliente'
@@ -192,6 +204,7 @@ export interface FileRouteTypes {
     | '/_authenticated/agencia/equipe'
     | '/_authenticated/agencia/fluxo'
     | '/_authenticated/agencia/visualizar'
+    | '/_authenticated/agencia/metricas'
     | '/_authenticated/cliente/aprovacoes'
     | '/_authenticated/agencia/'
     | '/_authenticated/cliente/'
@@ -258,6 +271,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgenciaVisualizarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/agencia/metricas': {
+      id: '/_authenticated/agencia/metricas'
+      path: '/agencia/metricas'
+      fullPath: '/agencia/metricas'
+      preLoaderRoute: typeof AuthenticatedAgenciaMetricasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/cliente/': {
       id: '/_authenticated/cliente/'
       path: '/cliente'
@@ -315,6 +335,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgenciaEquipeRoute: typeof AuthenticatedAgenciaEquipeRoute
   AuthenticatedAgenciaFluxoRoute: typeof AuthenticatedAgenciaFluxoRoute
   AuthenticatedAgenciaVisualizarRoute: typeof AuthenticatedAgenciaVisualizarRoute
+  AuthenticatedAgenciaMetricasRoute: typeof AuthenticatedAgenciaMetricasRoute
   AuthenticatedClienteAprovacoesRoute: typeof AuthenticatedClienteAprovacoesRoute
   AuthenticatedAgenciaIndexRoute: typeof AuthenticatedAgenciaIndexRoute
   AuthenticatedClienteIndexRoute: typeof AuthenticatedClienteIndexRoute
@@ -330,6 +351,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgenciaEquipeRoute: AuthenticatedAgenciaEquipeRoute,
   AuthenticatedAgenciaFluxoRoute: AuthenticatedAgenciaFluxoRoute,
   AuthenticatedAgenciaVisualizarRoute: AuthenticatedAgenciaVisualizarRoute,
+  AuthenticatedAgenciaMetricasRoute: AuthenticatedAgenciaMetricasRoute,
   AuthenticatedClienteAprovacoesRoute: AuthenticatedClienteAprovacoesRoute,
   AuthenticatedAgenciaIndexRoute: AuthenticatedAgenciaIndexRoute,
   AuthenticatedClienteIndexRoute: AuthenticatedClienteIndexRoute,

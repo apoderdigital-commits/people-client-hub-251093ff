@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   BarChart3,
   FileText,
-  LayoutDashboard,
   LayoutGrid,
   Megaphone,
   ShieldCheck,
@@ -59,12 +58,12 @@ function AgenciaMenu() {
               ) : null}
               {podeVer(permissoes, "area_cliente") ? (
                 <MenuCard
-                  titulo="Área do Cliente"
-                  descricao="Selecione um cliente e abra o portal dele para ver o menu e o dashboard de métricas."
-                  icone={LayoutDashboard}
-                  cor="indigo"
+                  titulo="Dashboard de Métricas"
+                  descricao="Atalho para escolher um cliente e abrir direto o dashboard de métricas dele."
+                  icone={BarChart3}
+                  cor="violet"
                   badge="Ativo"
-                  to="/agencia/visualizar"
+                  to="/agencia/metricas"
                 />
               ) : null}
               {podeVer(permissoes, "fluxo") ? (

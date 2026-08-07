@@ -1,29 +1,29 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, LayoutDashboard } from "lucide-react";
+import { ArrowLeft, BarChart3 } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { SeletorDeCliente } from "@/components/SeletorDeCliente";
 
-export const Route = createFileRoute("/_authenticated/agencia/visualizar")({
+export const Route = createFileRoute("/_authenticated/agencia/metricas")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Selecionar Cliente — people" },
+      { title: "Dashboard de Métricas — people" },
       {
         name: "description",
-        content: "Escolha qual cliente people você quer visualizar no portal do cliente.",
+        content: "Escolha um cliente people e abra o dashboard de métricas dele direto.",
       },
-      { property: "og:title", content: "Selecionar Cliente — people" },
+      { property: "og:title", content: "Dashboard de Métricas — people" },
       {
         property: "og:description",
-        content: "Selecione a conta do cliente para abrir o portal com a visão dele.",
+        content: "Atalho para abrir o dashboard de métricas de qualquer cliente people.",
       },
     ],
   }),
-  component: SelecionarCliente,
+  component: SelecionarClienteMetricas,
 });
 
-function SelecionarCliente() {
+function SelecionarClienteMetricas() {
   return (
     <ProtectedRoute role="agencia">
       {(perfil) => (
@@ -38,18 +38,18 @@ function SelecionarCliente() {
               Voltar ao menu
             </Link>
             <div className="mt-4 flex items-center gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-card-indigo">
-                <LayoutDashboard className="size-5 text-brand-foreground" strokeWidth={2.2} />
+              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-card-violet">
+                <BarChart3 className="size-5 text-brand-foreground" strokeWidth={2.2} />
               </span>
               <div className="min-w-0">
-                <h1 className="truncate text-2xl font-bold text-ink">Selecionar Cliente</h1>
+                <h1 className="truncate text-2xl font-bold text-ink">Dashboard de Métricas</h1>
                 <p className="text-sm text-ink-muted">
-                  Escolha a empresa para abrir o portal com a visão do cliente.
+                  Escolha a empresa para abrir direto o dashboard de métricas dela.
                 </p>
               </div>
             </div>
 
-            <SeletorDeCliente destino="/cliente" />
+            <SeletorDeCliente destino="/cliente/metricas" />
           </main>
         </div>
       )}
