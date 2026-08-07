@@ -221,40 +221,44 @@ function CartaoAprovacaoCard({
         </p>
       ) : null}
 
-      {cartao.legenda ? (
-        <div className="mt-3 rounded-xl border border-border bg-background px-3 py-2">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-            Legenda do post
-          </p>
-          <p className="mt-1 whitespace-pre-line text-sm text-ink">{cartao.legenda}</p>
-        </div>
-      ) : null}
+      {anexos.length > 0 || cartao.legenda ? (
+        <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start">
+          {anexos.length > 0 ? (
+            <div className="flex shrink-0 flex-wrap gap-3">
+              {anexos.map((a) =>
+                ehImagem(a.nome) ? (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => setImagemAberta({ url: a.url, nome: a.nome })}
+                    className="block size-28 overflow-hidden rounded-xl border border-border"
+                  >
+                    <img src={a.url} alt={a.nome} className="size-full object-cover" />
+                  </button>
+                ) : (
+                  <a
+                    key={a.id}
+                    href={a.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex size-28 flex-col items-center justify-center gap-1 rounded-xl border border-border bg-muted px-2 text-center"
+                  >
+                    <FileText className="size-6 text-ink-muted" />
+                    <span className="line-clamp-2 text-[10px] text-ink-muted">{a.nome}</span>
+                  </a>
+                ),
+              )}
+            </div>
+          ) : null}
 
-      {anexos.length > 0 ? (
-        <div className="mt-4 flex flex-wrap gap-3">
-          {anexos.map((a) =>
-            ehImagem(a.nome) ? (
-              <button
-                key={a.id}
-                type="button"
-                onClick={() => setImagemAberta({ url: a.url, nome: a.nome })}
-                className="block size-28 overflow-hidden rounded-xl border border-border"
-              >
-                <img src={a.url} alt={a.nome} className="size-full object-cover" />
-              </button>
-            ) : (
-              <a
-                key={a.id}
-                href={a.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex size-28 flex-col items-center justify-center gap-1 rounded-xl border border-border bg-muted px-2 text-center"
-              >
-                <FileText className="size-6 text-ink-muted" />
-                <span className="line-clamp-2 text-[10px] text-ink-muted">{a.nome}</span>
-              </a>
-            ),
-          )}
+          {cartao.legenda ? (
+            <div className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+                Legenda do post
+              </p>
+              <p className="mt-1 whitespace-pre-line text-sm text-ink">{cartao.legenda}</p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
