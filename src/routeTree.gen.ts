@@ -15,17 +15,17 @@ import { Route as AuthenticatedAgenciaIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedAgenciaClientesRouteImport } from './routes/_authenticated/agencia.clientes'
 import { Route as AuthenticatedAgenciaEquipeRouteImport } from './routes/_authenticated/agencia.equipe'
 import { Route as AuthenticatedAgenciaFluxoRouteImport } from './routes/_authenticated/agencia.fluxo'
-import { Route as AuthenticatedAgenciaVisualizarRouteImport } from './routes/_authenticated/agencia.visualizar'
 import { Route as AuthenticatedAgenciaMetricasRouteImport } from './routes/_authenticated/agencia.metricas'
+import { Route as AuthenticatedAgenciaVisualizarRouteImport } from './routes/_authenticated/agencia.visualizar'
 import { Route as AuthenticatedClienteIndexRouteImport } from './routes/_authenticated/cliente.index'
 import { Route as AuthenticatedClienteAprovacoesRouteImport } from './routes/_authenticated/cliente.aprovacoes'
 import { Route as AuthenticatedAgenciaAutomacoesIndexRouteImport } from './routes/_authenticated/agencia.automacoes.index'
 import { Route as AuthenticatedAgenciaAutomacoesAutomacaoIdRouteImport } from './routes/_authenticated/agencia.automacoes.$automacaoId'
 import { Route as AuthenticatedClienteMetricasIndexRouteImport } from './routes/_authenticated/cliente.metricas.index'
+import { Route as AuthenticatedClienteMetricasGmnRouteImport } from './routes/_authenticated/cliente.metricas.gmn'
+import { Route as AuthenticatedClienteMetricasGoogleAdsRouteImport } from './routes/_authenticated/cliente.metricas.google-ads'
 import { Route as AuthenticatedClienteMetricasInstagramRouteImport } from './routes/_authenticated/cliente.metricas.instagram'
 import { Route as AuthenticatedClienteMetricasMetaAdsRouteImport } from './routes/_authenticated/cliente.metricas.meta-ads'
-import { Route as AuthenticatedClienteMetricasGoogleAdsRouteImport } from './routes/_authenticated/cliente.metricas.google-ads'
-import { Route as AuthenticatedClienteMetricasGmnRouteImport } from './routes/_authenticated/cliente.metricas.gmn'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -60,16 +60,16 @@ const AuthenticatedAgenciaFluxoRoute =
     path: '/agencia/fluxo',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedAgenciaVisualizarRoute =
-  AuthenticatedAgenciaVisualizarRouteImport.update({
-    id: '/agencia/visualizar',
-    path: '/agencia/visualizar',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 const AuthenticatedAgenciaMetricasRoute =
   AuthenticatedAgenciaMetricasRouteImport.update({
     id: '/agencia/metricas',
     path: '/agencia/metricas',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedAgenciaVisualizarRoute =
+  AuthenticatedAgenciaVisualizarRouteImport.update({
+    id: '/agencia/visualizar',
+    path: '/agencia/visualizar',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedClienteIndexRoute =
@@ -102,6 +102,18 @@ const AuthenticatedClienteMetricasIndexRoute =
     path: '/cliente/metricas/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedClienteMetricasGmnRoute =
+  AuthenticatedClienteMetricasGmnRouteImport.update({
+    id: '/cliente/metricas/gmn',
+    path: '/cliente/metricas/gmn',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedClienteMetricasGoogleAdsRoute =
+  AuthenticatedClienteMetricasGoogleAdsRouteImport.update({
+    id: '/cliente/metricas/google-ads',
+    path: '/cliente/metricas/google-ads',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedClienteMetricasInstagramRoute =
   AuthenticatedClienteMetricasInstagramRouteImport.update({
     id: '/cliente/metricas/instagram',
@@ -114,34 +126,22 @@ const AuthenticatedClienteMetricasMetaAdsRoute =
     path: '/cliente/metricas/meta-ads',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedClienteMetricasGoogleAdsRoute =
-  AuthenticatedClienteMetricasGoogleAdsRouteImport.update({
-    id: '/cliente/metricas/google-ads',
-    path: '/cliente/metricas/google-ads',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedClienteMetricasGmnRoute =
-  AuthenticatedClienteMetricasGmnRouteImport.update({
-    id: '/cliente/metricas/gmn',
-    path: '/cliente/metricas/gmn',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/fluxo': typeof AuthenticatedAgenciaFluxoRoute
-  '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
   '/agencia/metricas': typeof AuthenticatedAgenciaMetricasRoute
+  '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
   '/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/agencia/': typeof AuthenticatedAgenciaIndexRoute
   '/cliente/': typeof AuthenticatedClienteIndexRoute
   '/agencia/automacoes/$automacaoId': typeof AuthenticatedAgenciaAutomacoesAutomacaoIdRoute
+  '/cliente/metricas/gmn': typeof AuthenticatedClienteMetricasGmnRoute
+  '/cliente/metricas/google-ads': typeof AuthenticatedClienteMetricasGoogleAdsRoute
   '/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
-  '/cliente/metricas/google-ads': typeof AuthenticatedClienteMetricasGoogleAdsRoute
-  '/cliente/metricas/gmn': typeof AuthenticatedClienteMetricasGmnRoute
   '/agencia/automacoes/': typeof AuthenticatedAgenciaAutomacoesIndexRoute
   '/cliente/metricas/': typeof AuthenticatedClienteMetricasIndexRoute
 }
@@ -150,16 +150,16 @@ export interface FileRoutesByTo {
   '/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/agencia/fluxo': typeof AuthenticatedAgenciaFluxoRoute
-  '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
   '/agencia/metricas': typeof AuthenticatedAgenciaMetricasRoute
+  '/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
   '/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/agencia': typeof AuthenticatedAgenciaIndexRoute
   '/cliente': typeof AuthenticatedClienteIndexRoute
   '/agencia/automacoes/$automacaoId': typeof AuthenticatedAgenciaAutomacoesAutomacaoIdRoute
+  '/cliente/metricas/gmn': typeof AuthenticatedClienteMetricasGmnRoute
+  '/cliente/metricas/google-ads': typeof AuthenticatedClienteMetricasGoogleAdsRoute
   '/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
-  '/cliente/metricas/google-ads': typeof AuthenticatedClienteMetricasGoogleAdsRoute
-  '/cliente/metricas/gmn': typeof AuthenticatedClienteMetricasGmnRoute
   '/agencia/automacoes': typeof AuthenticatedAgenciaAutomacoesIndexRoute
   '/cliente/metricas': typeof AuthenticatedClienteMetricasIndexRoute
 }
@@ -170,16 +170,16 @@ export interface FileRoutesById {
   '/_authenticated/agencia/clientes': typeof AuthenticatedAgenciaClientesRoute
   '/_authenticated/agencia/equipe': typeof AuthenticatedAgenciaEquipeRoute
   '/_authenticated/agencia/fluxo': typeof AuthenticatedAgenciaFluxoRoute
-  '/_authenticated/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
   '/_authenticated/agencia/metricas': typeof AuthenticatedAgenciaMetricasRoute
+  '/_authenticated/agencia/visualizar': typeof AuthenticatedAgenciaVisualizarRoute
   '/_authenticated/cliente/aprovacoes': typeof AuthenticatedClienteAprovacoesRoute
   '/_authenticated/agencia/': typeof AuthenticatedAgenciaIndexRoute
   '/_authenticated/cliente/': typeof AuthenticatedClienteIndexRoute
   '/_authenticated/agencia/automacoes/$automacaoId': typeof AuthenticatedAgenciaAutomacoesAutomacaoIdRoute
+  '/_authenticated/cliente/metricas/gmn': typeof AuthenticatedClienteMetricasGmnRoute
+  '/_authenticated/cliente/metricas/google-ads': typeof AuthenticatedClienteMetricasGoogleAdsRoute
   '/_authenticated/cliente/metricas/instagram': typeof AuthenticatedClienteMetricasInstagramRoute
   '/_authenticated/cliente/metricas/meta-ads': typeof AuthenticatedClienteMetricasMetaAdsRoute
-  '/_authenticated/cliente/metricas/google-ads': typeof AuthenticatedClienteMetricasGoogleAdsRoute
-  '/_authenticated/cliente/metricas/gmn': typeof AuthenticatedClienteMetricasGmnRoute
   '/_authenticated/agencia/automacoes/': typeof AuthenticatedAgenciaAutomacoesIndexRoute
   '/_authenticated/cliente/metricas/': typeof AuthenticatedClienteMetricasIndexRoute
 }
@@ -190,16 +190,16 @@ export interface FileRouteTypes {
     | '/agencia/clientes'
     | '/agencia/equipe'
     | '/agencia/fluxo'
-    | '/agencia/visualizar'
     | '/agencia/metricas'
+    | '/agencia/visualizar'
     | '/cliente/aprovacoes'
     | '/agencia/'
     | '/cliente/'
     | '/agencia/automacoes/$automacaoId'
+    | '/cliente/metricas/gmn'
+    | '/cliente/metricas/google-ads'
     | '/cliente/metricas/instagram'
     | '/cliente/metricas/meta-ads'
-    | '/cliente/metricas/google-ads'
-    | '/cliente/metricas/gmn'
     | '/agencia/automacoes/'
     | '/cliente/metricas/'
   fileRoutesByTo: FileRoutesByTo
@@ -208,16 +208,16 @@ export interface FileRouteTypes {
     | '/agencia/clientes'
     | '/agencia/equipe'
     | '/agencia/fluxo'
-    | '/agencia/visualizar'
     | '/agencia/metricas'
+    | '/agencia/visualizar'
     | '/cliente/aprovacoes'
     | '/agencia'
     | '/cliente'
     | '/agencia/automacoes/$automacaoId'
+    | '/cliente/metricas/gmn'
+    | '/cliente/metricas/google-ads'
     | '/cliente/metricas/instagram'
     | '/cliente/metricas/meta-ads'
-    | '/cliente/metricas/google-ads'
-    | '/cliente/metricas/gmn'
     | '/agencia/automacoes'
     | '/cliente/metricas'
   id:
@@ -227,16 +227,16 @@ export interface FileRouteTypes {
     | '/_authenticated/agencia/clientes'
     | '/_authenticated/agencia/equipe'
     | '/_authenticated/agencia/fluxo'
-    | '/_authenticated/agencia/visualizar'
     | '/_authenticated/agencia/metricas'
+    | '/_authenticated/agencia/visualizar'
     | '/_authenticated/cliente/aprovacoes'
     | '/_authenticated/agencia/'
     | '/_authenticated/cliente/'
     | '/_authenticated/agencia/automacoes/$automacaoId'
+    | '/_authenticated/cliente/metricas/gmn'
+    | '/_authenticated/cliente/metricas/google-ads'
     | '/_authenticated/cliente/metricas/instagram'
     | '/_authenticated/cliente/metricas/meta-ads'
-    | '/_authenticated/cliente/metricas/google-ads'
-    | '/_authenticated/cliente/metricas/gmn'
     | '/_authenticated/agencia/automacoes/'
     | '/_authenticated/cliente/metricas/'
   fileRoutesById: FileRoutesById
@@ -290,18 +290,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAgenciaFluxoRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/agencia/visualizar': {
-      id: '/_authenticated/agencia/visualizar'
-      path: '/agencia/visualizar'
-      fullPath: '/agencia/visualizar'
-      preLoaderRoute: typeof AuthenticatedAgenciaVisualizarRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
     '/_authenticated/agencia/metricas': {
       id: '/_authenticated/agencia/metricas'
       path: '/agencia/metricas'
       fullPath: '/agencia/metricas'
       preLoaderRoute: typeof AuthenticatedAgenciaMetricasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/agencia/visualizar': {
+      id: '/_authenticated/agencia/visualizar'
+      path: '/agencia/visualizar'
+      fullPath: '/agencia/visualizar'
+      preLoaderRoute: typeof AuthenticatedAgenciaVisualizarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/cliente/': {
@@ -339,6 +339,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClienteMetricasIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/cliente/metricas/gmn': {
+      id: '/_authenticated/cliente/metricas/gmn'
+      path: '/cliente/metricas/gmn'
+      fullPath: '/cliente/metricas/gmn'
+      preLoaderRoute: typeof AuthenticatedClienteMetricasGmnRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/cliente/metricas/google-ads': {
+      id: '/_authenticated/cliente/metricas/google-ads'
+      path: '/cliente/metricas/google-ads'
+      fullPath: '/cliente/metricas/google-ads'
+      preLoaderRoute: typeof AuthenticatedClienteMetricasGoogleAdsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/cliente/metricas/instagram': {
       id: '/_authenticated/cliente/metricas/instagram'
       path: '/cliente/metricas/instagram'
@@ -353,20 +367,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedClienteMetricasMetaAdsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/cliente/metricas/google-ads': {
-      id: '/_authenticated/cliente/metricas/google-ads'
-      path: '/cliente/metricas/google-ads'
-      fullPath: '/cliente/metricas/google-ads'
-      preLoaderRoute: typeof AuthenticatedClienteMetricasGoogleAdsRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/cliente/metricas/gmn': {
-      id: '/_authenticated/cliente/metricas/gmn'
-      path: '/cliente/metricas/gmn'
-      fullPath: '/cliente/metricas/gmn'
-      preLoaderRoute: typeof AuthenticatedClienteMetricasGmnRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
   }
 }
 
@@ -374,16 +374,16 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAgenciaClientesRoute: typeof AuthenticatedAgenciaClientesRoute
   AuthenticatedAgenciaEquipeRoute: typeof AuthenticatedAgenciaEquipeRoute
   AuthenticatedAgenciaFluxoRoute: typeof AuthenticatedAgenciaFluxoRoute
-  AuthenticatedAgenciaVisualizarRoute: typeof AuthenticatedAgenciaVisualizarRoute
   AuthenticatedAgenciaMetricasRoute: typeof AuthenticatedAgenciaMetricasRoute
+  AuthenticatedAgenciaVisualizarRoute: typeof AuthenticatedAgenciaVisualizarRoute
   AuthenticatedClienteAprovacoesRoute: typeof AuthenticatedClienteAprovacoesRoute
   AuthenticatedAgenciaIndexRoute: typeof AuthenticatedAgenciaIndexRoute
   AuthenticatedClienteIndexRoute: typeof AuthenticatedClienteIndexRoute
   AuthenticatedAgenciaAutomacoesAutomacaoIdRoute: typeof AuthenticatedAgenciaAutomacoesAutomacaoIdRoute
+  AuthenticatedClienteMetricasGmnRoute: typeof AuthenticatedClienteMetricasGmnRoute
+  AuthenticatedClienteMetricasGoogleAdsRoute: typeof AuthenticatedClienteMetricasGoogleAdsRoute
   AuthenticatedClienteMetricasInstagramRoute: typeof AuthenticatedClienteMetricasInstagramRoute
   AuthenticatedClienteMetricasMetaAdsRoute: typeof AuthenticatedClienteMetricasMetaAdsRoute
-  AuthenticatedClienteMetricasGoogleAdsRoute: typeof AuthenticatedClienteMetricasGoogleAdsRoute
-  AuthenticatedClienteMetricasGmnRoute: typeof AuthenticatedClienteMetricasGmnRoute
   AuthenticatedAgenciaAutomacoesIndexRoute: typeof AuthenticatedAgenciaAutomacoesIndexRoute
   AuthenticatedClienteMetricasIndexRoute: typeof AuthenticatedClienteMetricasIndexRoute
 }
@@ -392,21 +392,20 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAgenciaClientesRoute: AuthenticatedAgenciaClientesRoute,
   AuthenticatedAgenciaEquipeRoute: AuthenticatedAgenciaEquipeRoute,
   AuthenticatedAgenciaFluxoRoute: AuthenticatedAgenciaFluxoRoute,
-  AuthenticatedAgenciaVisualizarRoute: AuthenticatedAgenciaVisualizarRoute,
   AuthenticatedAgenciaMetricasRoute: AuthenticatedAgenciaMetricasRoute,
+  AuthenticatedAgenciaVisualizarRoute: AuthenticatedAgenciaVisualizarRoute,
   AuthenticatedClienteAprovacoesRoute: AuthenticatedClienteAprovacoesRoute,
   AuthenticatedAgenciaIndexRoute: AuthenticatedAgenciaIndexRoute,
   AuthenticatedClienteIndexRoute: AuthenticatedClienteIndexRoute,
   AuthenticatedAgenciaAutomacoesAutomacaoIdRoute:
     AuthenticatedAgenciaAutomacoesAutomacaoIdRoute,
+  AuthenticatedClienteMetricasGmnRoute: AuthenticatedClienteMetricasGmnRoute,
+  AuthenticatedClienteMetricasGoogleAdsRoute:
+    AuthenticatedClienteMetricasGoogleAdsRoute,
   AuthenticatedClienteMetricasInstagramRoute:
     AuthenticatedClienteMetricasInstagramRoute,
   AuthenticatedClienteMetricasMetaAdsRoute:
     AuthenticatedClienteMetricasMetaAdsRoute,
-  AuthenticatedClienteMetricasGoogleAdsRoute:
-    AuthenticatedClienteMetricasGoogleAdsRoute,
-  AuthenticatedClienteMetricasGmnRoute:
-    AuthenticatedClienteMetricasGmnRoute,
   AuthenticatedAgenciaAutomacoesIndexRoute:
     AuthenticatedAgenciaAutomacoesIndexRoute,
   AuthenticatedClienteMetricasIndexRoute:
@@ -423,3 +422,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

@@ -166,6 +166,10 @@ export type Database = {
           meta_faturamento: number
           metricas_kpis: Json | null
           nome: string
+          servico_gmn: boolean
+          servico_google_ads: boolean
+          servico_grs: boolean
+          servico_meta_ads: boolean
           token_atualizado_em: string | null
           ultima_sincronizacao: string | null
           updated_at: string
@@ -186,6 +190,10 @@ export type Database = {
           meta_faturamento?: number
           metricas_kpis?: Json | null
           nome: string
+          servico_gmn?: boolean
+          servico_google_ads?: boolean
+          servico_grs?: boolean
+          servico_meta_ads?: boolean
           token_atualizado_em?: string | null
           ultima_sincronizacao?: string | null
           updated_at?: string
@@ -206,6 +214,10 @@ export type Database = {
           meta_faturamento?: number
           metricas_kpis?: Json | null
           nome?: string
+          servico_gmn?: boolean
+          servico_google_ads?: boolean
+          servico_grs?: boolean
+          servico_meta_ads?: boolean
           token_atualizado_em?: string | null
           ultima_sincronizacao?: string | null
           updated_at?: string
@@ -326,6 +338,7 @@ export type Database = {
           entrega_arte: string | null
           entrega_texto: string | null
           id: string
+          legenda: string | null
           ordem: number
           prazo: string | null
           prioridade: string | null
@@ -343,6 +356,7 @@ export type Database = {
           entrega_arte?: string | null
           entrega_texto?: string | null
           id?: string
+          legenda?: string | null
           ordem?: number
           prazo?: string | null
           prioridade?: string | null
@@ -360,6 +374,7 @@ export type Database = {
           entrega_arte?: string | null
           entrega_texto?: string | null
           id?: string
+          legenda?: string | null
           ordem?: number
           prazo?: string | null
           prioridade?: string | null
@@ -528,64 +543,144 @@ export type Database = {
       metricas_campanhas: {
         Row: {
           acoes: Json
+          alcance: number
           atualizado_em: string
           campanha_id: string
           campanha_nome: string
           cliente_id: string
           cliques: number
+          cliques_link: number
+          cliques_link_unicos: number
+          cliques_saida: number
+          cliques_unicos: number
           conversoes: number
           data: string
           id: string
           impressoes: number
           investimento: number
           leads: number
+          reconhecimento_est: number
           status: string
+          video_15s: number
+          video_continuo_2s: number
           video_p100: number
           video_p25: number
           video_p50: number
           video_p75: number
+          video_p95: number
+          video_tempo_medio: number
+          video_thruplay: number
         }
         Insert: {
           acoes?: Json
+          alcance?: number
           atualizado_em?: string
           campanha_id: string
           campanha_nome?: string
           cliente_id: string
           cliques?: number
+          cliques_link?: number
+          cliques_link_unicos?: number
+          cliques_saida?: number
+          cliques_unicos?: number
           conversoes?: number
           data: string
           id?: string
           impressoes?: number
           investimento?: number
           leads?: number
+          reconhecimento_est?: number
           status?: string
+          video_15s?: number
+          video_continuo_2s?: number
           video_p100?: number
           video_p25?: number
           video_p50?: number
           video_p75?: number
+          video_p95?: number
+          video_tempo_medio?: number
+          video_thruplay?: number
         }
         Update: {
           acoes?: Json
+          alcance?: number
           atualizado_em?: string
           campanha_id?: string
           campanha_nome?: string
           cliente_id?: string
           cliques?: number
+          cliques_link?: number
+          cliques_link_unicos?: number
+          cliques_saida?: number
+          cliques_unicos?: number
           conversoes?: number
           data?: string
           id?: string
           impressoes?: number
           investimento?: number
           leads?: number
+          reconhecimento_est?: number
           status?: string
+          video_15s?: number
+          video_continuo_2s?: number
           video_p100?: number
           video_p25?: number
           video_p50?: number
           video_p75?: number
+          video_p95?: number
+          video_tempo_medio?: number
+          video_thruplay?: number
         }
         Relationships: [
           {
             foreignKeyName: "metricas_campanhas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metricas_campanhas_segmentadas: {
+        Row: {
+          atualizado_em: string
+          cliente_id: string
+          cliques: number
+          data: string
+          dimensao: string
+          id: string
+          impressoes: number
+          investimento: number
+          leads: number
+          valor: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cliente_id: string
+          cliques?: number
+          data: string
+          dimensao: string
+          id?: string
+          impressoes?: number
+          investimento?: number
+          leads?: number
+          valor: string
+        }
+        Update: {
+          atualizado_em?: string
+          cliente_id?: string
+          cliques?: number
+          data?: string
+          dimensao?: string
+          id?: string
+          impressoes?: number
+          investimento?: number
+          leads?: number
+          valor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metricas_campanhas_segmentadas_cliente_id_fkey"
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
@@ -655,46 +750,131 @@ export type Database = {
           },
         ]
       }
+      metricas_instagram_demografia: {
+        Row: {
+          atualizado_em: string
+          cliente_id: string
+          dimensao: string
+          id: string
+          quantidade: number
+          valor: string
+        }
+        Insert: {
+          atualizado_em?: string
+          cliente_id: string
+          dimensao: string
+          id?: string
+          quantidade?: number
+          valor: string
+        }
+        Update: {
+          atualizado_em?: string
+          cliente_id?: string
+          dimensao?: string
+          id?: string
+          quantidade?: number
+          valor?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metricas_instagram_demografia_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metricas_instagram_diarias: {
         Row: {
           alcance: number
           atualizado_em: string
           cliente_id: string
+          cliques_email: number
+          cliques_ligar: number
+          cliques_rota: number
+          cliques_site: number
           comentarios: number
           compartilhamentos: number
+          contas_engajadas: number
           curtidas: number
           data: string
           id: string
           seguidores: number
           visitas_perfil: number
+          visualizacoes: number
         }
         Insert: {
           alcance?: number
           atualizado_em?: string
           cliente_id: string
+          cliques_email?: number
+          cliques_ligar?: number
+          cliques_rota?: number
+          cliques_site?: number
           comentarios?: number
           compartilhamentos?: number
+          contas_engajadas?: number
           curtidas?: number
           data: string
           id?: string
           seguidores?: number
           visitas_perfil?: number
+          visualizacoes?: number
         }
         Update: {
           alcance?: number
           atualizado_em?: string
           cliente_id?: string
+          cliques_email?: number
+          cliques_ligar?: number
+          cliques_rota?: number
+          cliques_site?: number
           comentarios?: number
           compartilhamentos?: number
+          contas_engajadas?: number
           curtidas?: number
           data?: string
           id?: string
           seguidores?: number
           visitas_perfil?: number
+          visualizacoes?: number
         }
         Relationships: [
           {
             foreignKeyName: "metricas_instagram_diarias_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      metricas_instagram_horarios: {
+        Row: {
+          atualizado_em: string
+          cliente_id: string
+          hora: number
+          id: string
+          quantidade: number
+        }
+        Insert: {
+          atualizado_em?: string
+          cliente_id: string
+          hora: number
+          id?: string
+          quantidade?: number
+        }
+        Update: {
+          atualizado_em?: string
+          cliente_id?: string
+          hora?: number
+          id?: string
+          quantidade?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metricas_instagram_horarios_cliente_id_fkey"
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
@@ -711,10 +891,14 @@ export type Database = {
           compartilhamentos: number
           curtidas: number
           id: string
+          interacoes_totais: number
           legenda: string
           media_id: string
           permalink: string | null
           publicado_em: string | null
+          reproducoes: number
+          salvamentos: number
+          tempo_medio_exibicao: number
           tipo: string
         }
         Insert: {
@@ -725,10 +909,14 @@ export type Database = {
           compartilhamentos?: number
           curtidas?: number
           id?: string
+          interacoes_totais?: number
           legenda?: string
           media_id: string
           permalink?: string | null
           publicado_em?: string | null
+          reproducoes?: number
+          salvamentos?: number
+          tempo_medio_exibicao?: number
           tipo?: string
         }
         Update: {
@@ -739,10 +927,14 @@ export type Database = {
           compartilhamentos?: number
           curtidas?: number
           id?: string
+          interacoes_totais?: number
           legenda?: string
           media_id?: string
           permalink?: string | null
           publicado_em?: string | null
+          reproducoes?: number
+          salvamentos?: number
+          tempo_medio_exibicao?: number
           tipo?: string
         }
         Relationships: [
