@@ -7,6 +7,7 @@ import {
   Loader2,
   Paperclip,
   Plus,
+  Quote,
   Tag,
   Trash2,
   Users,
@@ -61,12 +62,14 @@ export function FluxoCartao(props: Props) {
   const { cartao, editavel, onFechar } = props;
   const [titulo, setTitulo] = useState(cartao.titulo);
   const [descricao, setDescricao] = useState(cartao.descricao ?? "");
+  const [legenda, setLegenda] = useState(cartao.legenda ?? "");
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     setTitulo(cartao.titulo);
     setDescricao(cartao.descricao ?? "");
-  }, [cartao.id, cartao.titulo, cartao.descricao]);
+    setLegenda(cartao.legenda ?? "");
+  }, [cartao.id, cartao.titulo, cartao.descricao, cartao.legenda]);
 
   useEffect(() => {
     function tecla(e: KeyboardEvent) {
@@ -159,6 +162,28 @@ export function FluxoCartao(props: Props) {
               ) : (
                 <p className="whitespace-pre-wrap text-sm text-ink-muted">
                   {cartao.descricao || "Sem descrição."}
+                </p>
+              )}
+            </Secao>
+
+            <Secao icone={Quote} titulo="Legenda (visível na aprovação do cliente)">
+              {editavel ? (
+                <textarea
+                  value={legenda}
+                  onChange={(e) => setLegenda(e.target.value)}
+                  onBlur={() => {
+                    const valor = legenda.trim();
+                    if (valor !== (cartao.legenda ?? "")) {
+                      void props.onAtualizar(cartao.id, { legenda: valor || null });
+                    }
+                  }}
+                  rows={4}
+                  placeholder="Escreva a legenda que vai junto com a arte no post…"
+                  className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                />
+              ) : (
+                <p className="whitespace-pre-wrap text-sm text-ink-muted">
+                  {cartao.legenda || "Sem legenda."}
                 </p>
               )}
             </Secao>

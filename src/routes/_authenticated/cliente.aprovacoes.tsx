@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, ChevronLeft, FileText, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronLeft, FileText, Loader2, X, XCircle } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { VisaoClienteBanner, VisaoClienteGate } from "@/components/VisaoCliente";
@@ -32,6 +32,7 @@ type CartaoAprovacao = {
   id: string;
   titulo: string;
   descricao: string | null;
+  legenda: string | null;
   prazo: string | null;
 };
 
@@ -178,6 +179,16 @@ function CartaoAprovacaoCard({
   const [reprovando, setReprovando] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
+  const [imagemAberta, setImagemAberta] = useState<{ url: string; nome: string } | null>(null);
+
+  useEffect(() => {
+    if (!imagemAberta) return;
+    function tecla(e: KeyboardEvent) {
+      if (e.key === "Escape") setImagemAberta(null);
+    }
+    document.addEventListener("keydown", tecla);
+    return () => document.removeEventListener("keydown", tecla);
+  }, [imagemAberta]);
 
   async function enviar(decisao: "aprovado" | "reprovado") {
     setEnviando(decisao);
@@ -210,19 +221,27 @@ function CartaoAprovacaoCard({
         </p>
       ) : null}
 
+      {cartao.legenda ? (
+        <div className="mt-3 rounded-xl border border-border bg-background px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+            Legenda do post
+          </p>
+          <p className="mt-1 whitespace-pre-line text-sm text-ink">{cartao.legenda}</p>
+        </div>
+      ) : null}
+
       {anexos.length > 0 ? (
         <div className="mt-4 flex flex-wrap gap-3">
           {anexos.map((a) =>
             ehImagem(a.nome) ? (
-              <a
+              <button
                 key={a.id}
-                href={a.url}
-                target="_blank"
-                rel="noopener noreferrer"
+                type="button"
+                onClick={() => setImagemAberta({ url: a.url, nome: a.nome })}
                 className="block size-28 overflow-hidden rounded-xl border border-border"
               >
                 <img src={a.url} alt={a.nome} className="size-full object-cover" />
-              </a>
+              </button>
             ) : (
               <a
                 key={a.id}
@@ -313,6 +332,28 @@ function CartaoAprovacaoCard({
       </div>
 
       {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
+
+      {imagemAberta ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setImagemAberta(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setImagemAberta(null)}
+            className="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+            aria-label="Fechar imagem"
+          >
+            <X className="size-5" />
+          </button>
+          <img
+            src={imagemAberta.url}
+            alt={imagemAberta.nome}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-full max-w-full rounded-xl object-contain"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

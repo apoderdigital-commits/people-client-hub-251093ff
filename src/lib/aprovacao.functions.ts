@@ -95,15 +95,20 @@ export const listarAprovacoesPendentes = createServerFn({ method: "POST" })
 
     const { data: cartoesBrutos, error } = await db
       .from("fluxo_cartoes")
-      .select("id, titulo, descricao, prazo, created_at")
+      .select("id, titulo, descricao, legenda, prazo, created_at")
       .eq("cliente_id", acesso.clienteId)
       .eq("coluna_id", colunaId)
       .order("created_at");
     if (error) throw new Error("Não foi possível carregar os conteúdos para aprovação.");
 
     const cartoes =
-      (cartoesBrutos as { id: string; titulo: string; descricao: string | null; prazo: string | null }[]) ??
-      [];
+      (cartoesBrutos as {
+        id: string;
+        titulo: string;
+        descricao: string | null;
+        legenda: string | null;
+        prazo: string | null;
+      }[]) ?? [];
     if (cartoes.length === 0) return { cartoes: [], anexos: [] };
 
     const { data: anexosBrutos } = await db

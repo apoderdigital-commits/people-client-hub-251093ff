@@ -91,10 +91,14 @@ type Cliente = {
   instagram_ultima_sincronizacao: string | null;
   instagram_erro_sincronizacao: string | null;
   instagram_kpis: unknown;
+  servico_grs: boolean;
+  servico_meta_ads: boolean;
+  servico_google_ads: boolean;
+  servico_gmn: boolean;
 };
 
 const COLUNAS =
-  "id, nome, identificador, ad_account_id, investimento_mensal, meta_faturamento, token_atualizado_em, ultima_sincronizacao, erro_sincronizacao, metricas_kpis, acao_lead, acao_conversao, instagram_business_account_id, instagram_ultima_sincronizacao, instagram_erro_sincronizacao, instagram_kpis";
+  "id, nome, identificador, ad_account_id, investimento_mensal, meta_faturamento, token_atualizado_em, ultima_sincronizacao, erro_sincronizacao, metricas_kpis, acao_lead, acao_conversao, instagram_business_account_id, instagram_ultima_sincronizacao, instagram_erro_sincronizacao, instagram_kpis, servico_grs, servico_meta_ads, servico_google_ads, servico_gmn";
 
 /** types.ts é gerado pelo Lovable e ainda não conhece as colunas novas. */
 const db = supabase as unknown as SupabaseClient;
@@ -558,6 +562,8 @@ function ClienteCard({
 
           {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
 
+          <Servicos cliente={cliente} onAtualizar={onAtualizar} />
+
           <Meta
             cliente={{ ...cliente, ad_account_id: adAccountId }}
             onAtualizar={onAtualizar}
@@ -572,6 +578,85 @@ function ClienteCard({
           <ConfigMetricasInstagram cliente={cliente} onAtualizar={onAtualizar} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+type ServicoChave = "servico_grs" | "servico_meta_ads" | "servico_google_ads" | "servico_gmn";
+
+const SERVICOS: { chave: ServicoChave; label: string }[] = [
+  { chave: "servico_grs", label: "GRS" },
+  { chave: "servico_meta_ads", label: "Meta Ads" },
+  { chave: "servico_google_ads", label: "Google Ads" },
+  { chave: "servico_gmn", label: "GMN" },
+];
+
+/**
+ * Marca quais serviços o cliente contratou. Hoje só o Google Ads trava algo
+ * (o dashboard de métricas do cliente), mas os quatro ficam registrados aqui
+ * porque é essa a lista que a agência pediu para controlar.
+ */
+function Servicos({
+  cliente,
+  onAtualizar,
+}: {
+  cliente: Cliente;
+  onAtualizar: (mudancas: Partial<Cliente>) => void;
+}) {
+  const [salvandoChave, setSalvandoChave] = useState<ServicoChave | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function alternar(chave: ServicoChave) {
+    const valor = !cliente[chave];
+    setSalvandoChave(chave);
+    setErro(null);
+    onAtualizar({ [chave]: valor });
+    const { error } = await db
+      .from("clientes")
+      .update({ [chave]: valor })
+      .eq("id", cliente.id);
+    if (error) {
+      onAtualizar({ [chave]: !valor });
+      setErro("Não foi possível salvar os serviços contratados.");
+    }
+    setSalvandoChave(null);
+  }
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+        Serviços contratados
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {SERVICOS.map(({ chave, label }) => {
+          const marcado = cliente[chave];
+          return (
+            <button
+              key={chave}
+              type="button"
+              onClick={() => void alternar(chave)}
+              disabled={salvandoChave === chave}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60",
+                marcado
+                  ? "border-brand bg-brand/10 text-brand"
+                  : "border-input text-ink-muted hover:border-brand hover:text-ink",
+              )}
+            >
+              <span
+                className={cn(
+                  "grid size-3.5 place-items-center rounded border",
+                  marcado ? "border-brand bg-brand" : "border-input",
+                )}
+              >
+                {marcado ? <Check className="size-2.5 text-brand-foreground" /> : null}
+              </span>
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
     </div>
   );
 }
