@@ -6,7 +6,7 @@
 
 import { normalizarId, obterAccessToken, type IntegracaoGoogle } from "@/lib/google.server";
 
-const VERSAO_API = "v18";
+const VERSAO_API = "v25";
 const BASE = `https://googleads.googleapis.com/${VERSAO_API}`;
 
 export type InsightCampanhaGoogleAds = {
