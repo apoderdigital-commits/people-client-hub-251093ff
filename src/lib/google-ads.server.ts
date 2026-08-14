@@ -37,7 +37,31 @@ type LinhaGoogleAds = {
   };
 };
 
-type ErroGoogleAds = { error?: { message?: string; status?: string } };
+type ErroDetalhado = { errorCode?: Record<string, string>; message?: string };
+type ErroGoogleAds = {
+  error?: {
+    message?: string;
+    status?: string;
+    details?: { errors?: ErroDetalhado[] }[];
+  };
+};
+
+/**
+ * A Google Ads API costuma devolver uma mensagem genérica no topo ("The
+ * caller does not have permission") e o motivo de verdade só aparece
+ * aninhado em error.details[].errors[] — sem extrair isso, todo erro de
+ * autorização vira a mesma frase inútil.
+ */
+function detalhesDoErro(corpo: ErroGoogleAds | null): string {
+  const detalhes = corpo?.error?.details?.flatMap((d) => d.errors ?? []) ?? [];
+  if (detalhes.length === 0) return "";
+  return detalhes
+    .map((e) => {
+      const codigo = e.errorCode ? Object.values(e.errorCode)[0] : null;
+      return [codigo, e.message].filter(Boolean).join(": ");
+    })
+    .join(" | ");
+}
 
 function numero(valor: string | number | undefined): number {
   const n = Number(valor);
@@ -56,7 +80,10 @@ function microsParaValor(valor: string | undefined): number {
 function traduzirErro(status: number, corpo: ErroGoogleAds | null): string {
   const mensagem = corpo?.error?.message ?? "";
   const statusGoogle = corpo?.error?.status ?? "";
-  const sufixo = mensagem ? ` (Google: "${mensagem}"${statusGoogle ? ` / ${statusGoogle}` : ""})` : "";
+  const detalhe = detalhesDoErro(corpo);
+  const sufixo = mensagem
+    ? ` (Google: "${mensagem}"${statusGoogle ? ` / ${statusGoogle}` : ""}${detalhe ? ` — ${detalhe}` : ""})`
+    : "";
 
   if (status === 401 || /UNAUTHENTICATED/i.test(statusGoogle)) {
     return `Autenticação com o Google Ads falhou. Confira o developer token e o refresh token.${sufixo}`;
