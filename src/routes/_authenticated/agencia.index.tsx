@@ -1,12 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AlertTriangle, ClipboardCheck, LayoutGrid, Loader2, Sparkles } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardCheck,
+  Eye,
+  Loader2,
+  PenTool,
+  Sparkles,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { supabase } from "@/integrations/supabase/client";
-import { permissoesEfetivas, podeVer } from "@/lib/equipe";
+import { permissoesEfetivas, podeVer, type EquipeRole } from "@/lib/equipe";
 import { hojeISO } from "@/lib/fluxo";
+import type { Perfil } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/agencia/")({
   head: () => ({
@@ -29,7 +40,10 @@ export const Route = createFileRoute("/_authenticated/agencia/")({
 /** types.ts é gerado pelo Lovable e ainda não conhece as tabelas do fluxo. */
 const db = supabase as unknown as SupabaseClient;
 
-const NOME_COLUNA_REVISAO = "revisão do cliente";
+/** Nomes das colunas fixas do fluxo, usadas pra saber o que sinalizar pra cada função. */
+const COL_APRESENTACAO = "apresentação";
+const COL_REVISAO_INTERNA = "revisão interna";
+const COL_REVISAO_CLIENTE = "revisão do cliente";
 
 function AgenciaInicio() {
   return (
@@ -48,7 +62,7 @@ function AgenciaInicio() {
               </h1>
 
               {podeVer(permissoes, "fluxo") ? (
-                <Pendencias perfilId={perfil.id} />
+                <PainelFluxo perfil={perfil} />
               ) : (
                 <p className="mt-7 rounded-2xl border border-border bg-card px-4 py-6 text-sm text-ink-muted shadow-card">
                   Sem pendências pra mostrar por aqui no momento.
@@ -62,141 +76,118 @@ function AgenciaInicio() {
   );
 }
 
-type CartaoAtribuido = {
+type ColunaInfo = { id: string; nome: string; ordem: number };
+type CartaoBruto = {
   id: string;
   titulo: string;
-  clienteNome: string | null;
-  colunaNome: string;
-  atrasado: boolean;
-  novo: boolean;
-  criadoEm: string;
+  cliente_id: string | null;
+  coluna_id: string;
+  prazo: string | null;
+  entrega_texto: string | null;
+  entrega_arte: string | null;
+  agendamento: string | null;
+  publicacao: string | null;
 };
+type VinculoBruto = { cartao_id: string; perfil_id: string; created_at?: string };
+type ClienteRef = { id: string; nome: string };
+type MembroRef = { id: string; nome: string | null; email: string };
 
-type PendenciaAprovacao = { clienteId: string; clienteNome: string; total: number };
+function normalizarNomeColuna(nome: string): string {
+  return nome.trim().toLowerCase();
+}
 
-function Pendencias({ perfilId }: { perfilId: string }) {
-  const [atribuidos, setAtribuidos] = useState<CartaoAtribuido[]>([]);
-  const [aprovacoes, setAprovacoes] = useState<PendenciaAprovacao[]>([]);
+function PainelFluxo({ perfil }: { perfil: Perfil }) {
+  const [colunas, setColunas] = useState<ColunaInfo[]>([]);
+  const [cartoes, setCartoes] = useState<CartaoBruto[]>([]);
+  const [responsaveis, setResponsaveis] = useState<VinculoBruto[]>([]);
+  const [clientes, setClientes] = useState<ClienteRef[]>([]);
+  const [membros, setMembros] = useState<MembroRef[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     let ativo = true;
-
     (async () => {
-      const [colunasRes, respRes] = await Promise.all([
+      const [colunasRes, cartoesRes, respRes, clientesRes, membrosRes] = await Promise.all([
         db.from("fluxo_colunas").select("id, nome, ordem").order("ordem"),
-        db.from("fluxo_responsaveis").select("cartao_id, created_at").eq("perfil_id", perfilId),
-      ]);
-      if (!ativo) return;
-
-      const falhaInicial = colunasRes.error ?? respRes.error;
-      if (falhaInicial) {
-        setErro(falhaInicial.message);
-        setCarregando(false);
-        return;
-      }
-
-      const colunas = (colunasRes.data as { id: string; nome: string; ordem: number }[]) ?? [];
-      const ultimaColuna = colunas.length > 0 ? colunas[colunas.length - 1] : null;
-      const colunaRevisao = colunas.find(
-        (c) => c.nome.trim().toLowerCase() === NOME_COLUNA_REVISAO,
-      );
-
-      const vinculos = (respRes.data as { cartao_id: string; created_at?: string }[]) ?? [];
-      const cartaoIds = vinculos.map((v) => v.cartao_id);
-
-      const [cartoesRes, clientesRes, revisaoRes] = await Promise.all([
-        cartaoIds.length > 0
-          ? db
-              .from("fluxo_cartoes")
-              .select(
-                "id, titulo, cliente_id, coluna_id, prazo, entrega_texto, entrega_arte, agendamento, publicacao",
-              )
-              .in("id", cartaoIds)
-          : Promise.resolve({ data: [] as unknown[], error: null }),
+        db
+          .from("fluxo_cartoes")
+          .select(
+            "id, titulo, cliente_id, coluna_id, prazo, entrega_texto, entrega_arte, agendamento, publicacao",
+          ),
+        db.from("fluxo_responsaveis").select("cartao_id, perfil_id, created_at"),
         db.from("clientes").select("id, nome"),
-        colunaRevisao
-          ? db.from("fluxo_cartoes").select("cliente_id").eq("coluna_id", colunaRevisao.id)
-          : Promise.resolve({ data: [] as unknown[], error: null }),
+        db.from("profiles").select("id, nome, email").eq("role", "agencia"),
       ]);
       if (!ativo) return;
 
-      if (cartoesRes.error) {
-        setErro(cartoesRes.error.message);
+      const falha =
+        colunasRes.error ?? cartoesRes.error ?? respRes.error ?? clientesRes.error ?? membrosRes.error;
+      if (falha) {
+        setErro(falha.message);
         setCarregando(false);
         return;
       }
 
-      const clientesMapa = new Map(
-        ((clientesRes.data as { id: string; nome: string }[]) ?? []).map((c) => [c.id, c.nome]),
-      );
-      const colunasMapa = new Map(colunas.map((c) => [c.id, c.nome]));
-      const criadoEmMapa = new Map(vinculos.map((v) => [v.cartao_id, v.created_at ?? ""]));
-
-      const hoje = hojeISO();
-      const limiteNovo = new Date();
-      limiteNovo.setDate(limiteNovo.getDate() - 3);
-
-      type CartaoBruto = {
-        id: string;
-        titulo: string;
-        cliente_id: string | null;
-        coluna_id: string;
-        prazo: string | null;
-        entrega_texto: string | null;
-        entrega_arte: string | null;
-        agendamento: string | null;
-        publicacao: string | null;
-      };
-
-      const lista: CartaoAtribuido[] = ((cartoesRes.data as CartaoBruto[]) ?? []).map((c) => {
-        const datas = [c.prazo, c.entrega_texto, c.entrega_arte, c.agendamento, c.publicacao].filter(
-          (d): d is string => Boolean(d),
-        );
-        const atrasado = datas.some((d) => d < hoje) && c.coluna_id !== ultimaColuna?.id;
-        const criadoEm = criadoEmMapa.get(c.id) ?? "";
-        const novo = Boolean(criadoEm) && new Date(criadoEm) >= limiteNovo;
-        return {
-          id: c.id,
-          titulo: c.titulo,
-          clienteNome: c.cliente_id ? (clientesMapa.get(c.cliente_id) ?? null) : null,
-          colunaNome: colunasMapa.get(c.coluna_id) ?? "",
-          atrasado,
-          novo,
-          criadoEm,
-        };
-      });
-
-      lista.sort((a, b) => {
-        if (a.atrasado !== b.atrasado) return a.atrasado ? -1 : 1;
-        return b.criadoEm.localeCompare(a.criadoEm);
-      });
-      setAtribuidos(lista);
-
-      const contagem = new Map<string, number>();
-      for (const linha of (revisaoRes.data as { cliente_id: string | null }[]) ?? []) {
-        if (!linha.cliente_id) continue;
-        contagem.set(linha.cliente_id, (contagem.get(linha.cliente_id) ?? 0) + 1);
-      }
-      setAprovacoes(
-        Array.from(contagem.entries())
-          .map(([clienteId, total]) => ({
-            clienteId,
-            clienteNome: clientesMapa.get(clienteId) ?? "Cliente",
-            total,
-          }))
-          .sort((a, b) => b.total - a.total),
-      );
-
+      setColunas((colunasRes.data as ColunaInfo[]) ?? []);
+      setCartoes((cartoesRes.data as CartaoBruto[]) ?? []);
+      setResponsaveis((respRes.data as VinculoBruto[]) ?? []);
+      setClientes((clientesRes.data as ClienteRef[]) ?? []);
+      setMembros((membrosRes.data as MembroRef[]) ?? []);
       setErro(null);
       setCarregando(false);
     })();
-
     return () => {
       ativo = false;
     };
-  }, [perfilId]);
+  }, []);
+
+  const dados = useMemo(() => {
+    const hoje = hojeISO();
+    const ultimaColuna = colunas.length > 0 ? colunas[colunas.length - 1] : undefined;
+    const colApresentacao = colunas.find((c) => normalizarNomeColuna(c.nome) === COL_APRESENTACAO);
+    const colRevisaoInterna = colunas.find(
+      (c) => normalizarNomeColuna(c.nome) === COL_REVISAO_INTERNA,
+    );
+    const colRevisaoCliente = colunas.find(
+      (c) => normalizarNomeColuna(c.nome) === COL_REVISAO_CLIENTE,
+    );
+
+    const colunaPorId = new Map(colunas.map((c) => [c.id, c]));
+    const clientePorId = new Map(clientes.map((c) => [c.id, c.nome]));
+    const membroPorId = new Map(membros.map((m) => [m.id, m.nome || m.email]));
+    const cartaoPorId = new Map(cartoes.map((c) => [c.id, c]));
+
+    function estaAtrasado(c: CartaoBruto): boolean {
+      const datas = [c.prazo, c.entrega_texto, c.entrega_arte, c.agendamento, c.publicacao].filter(
+        (d): d is string => Boolean(d),
+      );
+      return datas.some((d) => d < hoje) && c.coluna_id !== ultimaColuna?.id;
+    }
+
+    const meusVinculos = responsaveis.filter((v) => v.perfil_id === perfil.id);
+    const meusCartaoIds = new Set(meusVinculos.map((v) => v.cartao_id));
+    const criadoEmPorCartao = new Map(meusVinculos.map((v) => [v.cartao_id, v.created_at ?? ""]));
+    const meusCartoes = cartoes.filter((c) => meusCartaoIds.has(c.id));
+
+    const limiteNovo = new Date();
+    limiteNovo.setDate(limiteNovo.getDate() - 3);
+
+    return {
+      colunaPorId,
+      clientePorId,
+      membroPorId,
+      cartaoPorId,
+      estaAtrasado,
+      ultimaColuna,
+      colApresentacao,
+      colRevisaoInterna,
+      colRevisaoCliente,
+      meusCartoes,
+      criadoEmPorCartao,
+      limiteNovo,
+    };
+  }, [colunas, cartoes, responsaveis, clientes, membros, perfil.id]);
 
   if (carregando) {
     return (
@@ -210,86 +201,328 @@ function Pendencias({ perfilId }: { perfilId: string }) {
     return <p className="mt-7 text-sm text-destructive">{erro}</p>;
   }
 
-  const semNada = atribuidos.length === 0 && aprovacoes.length === 0;
+  return <PainelPorFuncao perfil={perfil} cartoes={cartoes} responsaveis={responsaveis} {...dados} />;
+}
+
+function PainelPorFuncao({
+  perfil,
+  cartoes,
+  responsaveis,
+  colunaPorId,
+  clientePorId,
+  membroPorId,
+  cartaoPorId,
+  estaAtrasado,
+  colApresentacao,
+  colRevisaoInterna,
+  colRevisaoCliente,
+  meusCartoes,
+  criadoEmPorCartao,
+  limiteNovo,
+}: {
+  perfil: Perfil;
+  cartoes: CartaoBruto[];
+  responsaveis: VinculoBruto[];
+  colunaPorId: Map<string, ColunaInfo>;
+  clientePorId: Map<string, string>;
+  membroPorId: Map<string, string>;
+  cartaoPorId: Map<string, CartaoBruto>;
+  estaAtrasado: (c: CartaoBruto) => boolean;
+  colApresentacao: ColunaInfo | undefined;
+  colRevisaoInterna: ColunaInfo | undefined;
+  colRevisaoCliente: ColunaInfo | undefined;
+  meusCartoes: CartaoBruto[];
+  criadoEmPorCartao: Map<string, string>;
+  limiteNovo: Date;
+}) {
+  const cargo: EquipeRole | null = perfil.equipe_role;
+  const atrasados = meusCartoes.filter(estaAtrasado);
+
+  const secaoAtrasados =
+    atrasados.length > 0 ? (
+      <Secao icone={AlertTriangle} titulo="Demandas atrasadas">
+        {atrasados.map((c) => (
+          <LinhaCartao
+            key={c.id}
+            titulo={c.titulo}
+            clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+            atrasado
+          />
+        ))}
+      </Secao>
+    ) : null;
+
+  let conteudo: React.ReactNode;
+  let temAlgo = false;
+
+  if (cargo === "designer" || cargo === "editor_video") {
+    const producao = meusCartoes.filter(
+      (c) =>
+        c.coluna_id !== colApresentacao?.id &&
+        c.coluna_id !== colRevisaoInterna?.id &&
+        c.coluna_id !== colRevisaoCliente?.id &&
+        !estaAtrasado(c),
+    );
+    temAlgo = producao.length > 0 || atrasados.length > 0;
+    conteudo = (
+      <>
+        {producao.length > 0 ? (
+          <Secao icone={PenTool} titulo="Sua produção">
+            {producao.map((c) => {
+              const criadoEm = criadoEmPorCartao.get(c.id) ?? "";
+              const novo = Boolean(criadoEm) && new Date(criadoEm) >= limiteNovo;
+              return (
+                <LinhaCartao
+                  key={c.id}
+                  titulo={c.titulo}
+                  clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+                  extra={colunaPorId.get(c.coluna_id)?.nome}
+                  novo={novo}
+                />
+              );
+            })}
+          </Secao>
+        ) : null}
+        {secaoAtrasados}
+      </>
+    );
+  } else if (cargo === "social_media") {
+    const paraAprovar = colApresentacao
+      ? cartoes.filter((c) => c.coluna_id === colApresentacao.id)
+      : [];
+    const aguardandoCliente = colRevisaoCliente
+      ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id)
+      : [];
+    temAlgo = paraAprovar.length > 0 || aguardandoCliente.length > 0 || atrasados.length > 0;
+    conteudo = (
+      <>
+        {paraAprovar.length > 0 ? (
+          <Secao icone={Eye} titulo="Aguardando sua revisão">
+            {paraAprovar.map((c) => (
+              <LinhaCartao
+                key={c.id}
+                titulo={c.titulo}
+                clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+                extra="Produção pronta ou ajuste pedido pelo cliente"
+              />
+            ))}
+          </Secao>
+        ) : null}
+        {aguardandoCliente.length > 0 ? (
+          <Secao icone={ClipboardCheck} titulo="Aguardando aprovação do cliente">
+            {aguardandoCliente.map((c) => (
+              <LinhaCartao
+                key={c.id}
+                titulo={c.titulo}
+                clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+              />
+            ))}
+          </Secao>
+        ) : null}
+        {secaoAtrasados}
+      </>
+    );
+  } else if (cargo === "gerente_projeto") {
+    const paraRevisar = colRevisaoInterna
+      ? cartoes.filter((c) => c.coluna_id === colRevisaoInterna.id)
+      : [];
+    const equipeTemAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id));
+    temAlgo = paraRevisar.length > 0 || atrasados.length > 0 || equipeTemAlgo;
+    conteudo = (
+      <>
+        {paraRevisar.length > 0 ? (
+          <Secao icone={CheckCircle2} titulo="Aguardando sua revisão interna">
+            {paraRevisar.map((c) => (
+              <LinhaCartao
+                key={c.id}
+                titulo={c.titulo}
+                clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+              />
+            ))}
+          </Secao>
+        ) : null}
+        {secaoAtrasados}
+        <SecaoEquipe
+          responsaveis={responsaveis}
+          cartaoPorId={cartaoPorId}
+          membroPorId={membroPorId}
+          estaAtrasado={estaAtrasado}
+        />
+      </>
+    );
+  } else if (cargo === "admin" || cargo === "super_admin") {
+    temAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id));
+    conteudo = (
+      <SecaoEquipe
+        responsaveis={responsaveis}
+        cartaoPorId={cartaoPorId}
+        membroPorId={membroPorId}
+        estaAtrasado={estaAtrasado}
+      />
+    );
+  } else {
+    const aguardandoCliente = colRevisaoCliente
+      ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id)
+      : [];
+    const contagemPorCliente = new Map<string, number>();
+    for (const c of aguardandoCliente) {
+      if (!c.cliente_id) continue;
+      contagemPorCliente.set(c.cliente_id, (contagemPorCliente.get(c.cliente_id) ?? 0) + 1);
+    }
+    temAlgo = meusCartoes.length > 0 || contagemPorCliente.size > 0;
+    conteudo = (
+      <>
+        {meusCartoes.length > 0 ? (
+          <Secao icone={Sparkles} titulo="Atribuído a você">
+            {meusCartoes.slice(0, 8).map((c) => (
+              <LinhaCartao
+                key={c.id}
+                titulo={c.titulo}
+                clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+                extra={colunaPorId.get(c.coluna_id)?.nome}
+                atrasado={estaAtrasado(c)}
+              />
+            ))}
+            <Link
+              to="/agencia/fluxo"
+              className="mt-1 inline-block text-sm font-semibold text-brand hover:underline"
+            >
+              Ver Fluxo People
+            </Link>
+          </Secao>
+        ) : null}
+        {contagemPorCliente.size > 0 ? (
+          <Secao icone={ClipboardCheck} titulo="Aguardando aprovação do cliente">
+            {Array.from(contagemPorCliente.entries())
+              .sort((a, b) => b[1] - a[1])
+              .map(([clienteId, total]) => (
+                <LinhaCartao
+                  key={clienteId}
+                  titulo={clientePorId.get(clienteId) ?? "Cliente"}
+                  extra={`${total} ${total === 1 ? "pendente" : "pendentes"}`}
+                />
+              ))}
+          </Secao>
+        ) : null}
+      </>
+    );
+  }
 
   return (
     <div className="mt-7 flex flex-col gap-8">
-      {semNada ? (
+      {!temAlgo ? (
         <p className="rounded-2xl border border-border bg-card px-4 py-6 text-sm text-ink-muted shadow-card">
           Tudo em dia por aqui.
         </p>
-      ) : null}
+      ) : (
+        conteudo
+      )}
+    </div>
+  );
+}
 
-      {atribuidos.length > 0 ? (
-        <section>
-          <div className="flex items-center gap-2">
-            <LayoutGrid className="size-4 text-ink-muted" />
-            <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">
-              Atribuído a você
-            </h2>
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {atribuidos.slice(0, 8).map((c) => (
-              <div
-                key={c.id}
-                className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-card"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                  {c.titulo}
-                </span>
-                {c.clienteNome ? (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
-                    {c.clienteNome}
-                  </span>
-                ) : null}
-                <span className="shrink-0 text-[11px] text-ink-muted">{c.colunaNome}</span>
-                {c.atrasado ? (
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
-                    <AlertTriangle className="size-3" />
-                    Atrasado
-                  </span>
-                ) : c.novo ? (
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
-                    <Sparkles className="size-3" />
-                    Novo
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-          <Link
-            to="/agencia/fluxo"
-            className="mt-2 inline-block text-sm font-semibold text-brand hover:underline"
-          >
-            Ver Fluxo People
-          </Link>
-        </section>
-      ) : null}
+function SecaoEquipe({
+  responsaveis,
+  cartaoPorId,
+  membroPorId,
+  estaAtrasado,
+}: {
+  responsaveis: VinculoBruto[];
+  cartaoPorId: Map<string, CartaoBruto>;
+  membroPorId: Map<string, string>;
+  estaAtrasado: (c: CartaoBruto) => boolean;
+}) {
+  const porColaborador = new Map<string, { total: number; atrasados: number }>();
+  for (const v of responsaveis) {
+    const cartao = cartaoPorId.get(v.cartao_id);
+    if (!cartao) continue;
+    const atual = porColaborador.get(v.perfil_id) ?? { total: 0, atrasados: 0 };
+    atual.total += 1;
+    if (estaAtrasado(cartao)) atual.atrasados += 1;
+    porColaborador.set(v.perfil_id, atual);
+  }
 
-      {aprovacoes.length > 0 ? (
-        <section>
-          <div className="flex items-center gap-2">
-            <ClipboardCheck className="size-4 text-ink-muted" />
-            <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">
-              Aguardando aprovação do cliente
-            </h2>
-          </div>
-          <div className="mt-3 flex flex-col gap-2">
-            {aprovacoes.map((a) => (
-              <div
-                key={a.clienteId}
-                className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
-                  {a.clienteNome}
-                </span>
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
-                  {a.total} {a.total === 1 ? "pendente" : "pendentes"}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+  const linhas = Array.from(porColaborador.entries())
+    .map(([perfilId, c]) => ({ perfilId, nome: membroPorId.get(perfilId) ?? "—", ...c }))
+    .sort((a, b) => b.atrasados - a.atrasados || b.total - a.total);
+
+  if (linhas.length === 0) return null;
+
+  return (
+    <Secao icone={Users} titulo="Pendências por colaborador">
+      {linhas.map((l) => (
+        <div
+          key={l.perfilId}
+          className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card"
+        >
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{l.nome}</span>
+          {l.atrasados > 0 ? (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+              <AlertTriangle className="size-3" />
+              {l.atrasados} {l.atrasados === 1 ? "atrasado" : "atrasados"}
+            </span>
+          ) : null}
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
+            {l.total} {l.total === 1 ? "cartão" : "cartões"}
+          </span>
+        </div>
+      ))}
+    </Secao>
+  );
+}
+
+function Secao({
+  icone: Icone,
+  titulo,
+  children,
+}: {
+  icone: LucideIcon;
+  titulo: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="flex items-center gap-2">
+        <Icone className="size-4 text-ink-muted" />
+        <h2 className="text-sm font-bold uppercase tracking-wide text-ink-muted">{titulo}</h2>
+      </div>
+      <div className="mt-3 flex flex-col gap-2">{children}</div>
+    </section>
+  );
+}
+
+function LinhaCartao({
+  titulo,
+  clienteNome,
+  extra,
+  atrasado,
+  novo,
+}: {
+  titulo: string;
+  clienteNome?: string | null;
+  extra?: string | null;
+  atrasado?: boolean;
+  novo?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{titulo}</span>
+      {clienteNome ? (
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
+          {clienteNome}
+        </span>
+      ) : null}
+      {extra ? <span className="shrink-0 text-[11px] text-ink-muted">{extra}</span> : null}
+      {atrasado ? (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
+          <AlertTriangle className="size-3" />
+          Atrasado
+        </span>
+      ) : novo ? (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand">
+          <Sparkles className="size-3" />
+          Novo
+        </span>
       ) : null}
     </div>
   );
