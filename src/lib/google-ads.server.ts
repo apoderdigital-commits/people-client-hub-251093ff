@@ -101,9 +101,25 @@ async function consultar(
     throw new Error("Não foi possível alcançar o Google Ads. Verifique a conexão.");
   }
 
-  const corpo = await resposta.json().catch(() => null);
+  const textoBruto = await resposta.text();
+  let corpo: unknown = null;
+  try {
+    corpo = textoBruto ? JSON.parse(textoBruto) : null;
+  } catch {
+    corpo = null;
+  }
+
   if (!resposta.ok) {
-    throw new Error(traduzirErro(resposta.status, corpo as ErroGoogleAds | null));
+    // A Google Ads API às vezes devolve um array de erros em vez do objeto
+    // {error:{...}} padrão — normalizamos os dois formatos antes de traduzir.
+    const normalizado = Array.isArray(corpo) ? (corpo[0] as ErroGoogleAds | undefined) ?? null : (corpo as ErroGoogleAds | null);
+    const semMensagem = !normalizado?.error?.message;
+    const base = traduzirErro(resposta.status, normalizado);
+    throw new Error(
+      semMensagem
+        ? `${base} [HTTP ${resposta.status}: ${textoBruto.slice(0, 300) || "(corpo vazio)"}]`
+        : base,
+    );
   }
 
   return ((corpo as { results?: LinhaGoogleAds[] } | null)?.results ?? []) as LinhaGoogleAds[];
