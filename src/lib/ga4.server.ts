@@ -40,10 +40,10 @@ function traduzirErro(status: number, corpo: ErroGA4 | null): string {
     return "Autenticação com o Google Analytics falhou. Gere um novo refresh token e salve de novo.";
   }
   if (status === 403 || /PERMISSION_DENIED/i.test(corpo?.error?.status ?? "")) {
-    return "Sem permissão pra acessar essa propriedade do GA4. Confira se a conta autorizada tem acesso de leitor nela.";
+    return `Sem permissão pra acessar essa propriedade do GA4. Confira se a conta autorizada tem acesso de leitor nela.${mensagem ? ` (Google: "${mensagem}")` : ""}`;
   }
   if (status === 404 || /not found/i.test(mensagem)) {
-    return "Propriedade do GA4 não encontrada. Confira o Property ID (só números).";
+    return `Propriedade do GA4 não encontrada. Confira o Property ID (só números).${mensagem ? ` (Google: "${mensagem}")` : ""}`;
   }
   return mensagem ? `Erro do Google Analytics: ${mensagem}` : "O Google Analytics recusou a requisição.";
 }
@@ -70,9 +70,23 @@ async function relatorio(
     throw new Error("Não foi possível alcançar o Google Analytics. Verifique a conexão.");
   }
 
-  const corpo = await resposta.json().catch(() => null);
+  const textoBruto = await resposta.text();
+  let corpo: unknown = null;
+  try {
+    corpo = textoBruto ? JSON.parse(textoBruto) : null;
+  } catch {
+    corpo = null;
+  }
+
   if (!resposta.ok) {
-    throw new Error(traduzirErro(resposta.status, corpo as ErroGA4 | null));
+    const normalizado = Array.isArray(corpo) ? (corpo[0] as ErroGA4 | undefined) ?? null : (corpo as ErroGA4 | null);
+    const semMensagem = !normalizado?.error?.message;
+    const base = traduzirErro(resposta.status, normalizado);
+    throw new Error(
+      semMensagem
+        ? `${base} [HTTP ${resposta.status}: ${textoBruto.slice(0, 300) || "(corpo vazio)"}]`
+        : base,
+    );
   }
 
   return ((corpo as { rows?: LinhaRelatorio[] } | null)?.rows ?? []) as LinhaRelatorio[];
