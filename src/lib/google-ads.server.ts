@@ -48,20 +48,27 @@ function microsParaValor(valor: string | undefined): number {
   return numero(valor) / 1_000_000;
 }
 
-/** Mensagens da Google Ads API chegam técnicas; traduzimos as mais comuns. */
+/**
+ * Mensagens da Google Ads API chegam técnicas; adicionamos uma pista em cima,
+ * mas sempre mostrando a mensagem original da Google no final — sem isso, um
+ * erro mal categorizado aqui vira um beco sem saída pra debugar.
+ */
 function traduzirErro(status: number, corpo: ErroGoogleAds | null): string {
   const mensagem = corpo?.error?.message ?? "";
-  if (status === 401 || /UNAUTHENTICATED/i.test(corpo?.error?.status ?? "")) {
-    return "Autenticação com o Google Ads falhou. Confira o developer token e o refresh token.";
+  const statusGoogle = corpo?.error?.status ?? "";
+  const sufixo = mensagem ? ` (Google: "${mensagem}"${statusGoogle ? ` / ${statusGoogle}` : ""})` : "";
+
+  if (status === 401 || /UNAUTHENTICATED/i.test(statusGoogle)) {
+    return `Autenticação com o Google Ads falhou. Confira o developer token e o refresh token.${sufixo}`;
   }
-  if (status === 403 || /PERMISSION_DENIED/i.test(corpo?.error?.status ?? "")) {
-    return "Sem permissão pra acessar essa conta do Google Ads. Confira se ela está vinculada à conta gerenciadora.";
+  if (status === 403 || /PERMISSION_DENIED/i.test(statusGoogle)) {
+    return `Sem permissão pra acessar essa conta do Google Ads. Confira se ela está vinculada à conta gerenciadora.${sufixo}`;
   }
-  if (/NOT_FOUND/i.test(corpo?.error?.status ?? "") || status === 404) {
-    return "Conta do Google Ads não encontrada. Confira o Customer ID (formato 123-456-7890).";
+  if (/NOT_FOUND/i.test(statusGoogle) || status === 404) {
+    return `Conta do Google Ads não encontrada. Confira o Customer ID (formato 123-456-7890).${sufixo}`;
   }
   if (/CUSTOMER_NOT_ENABLED/i.test(mensagem)) {
-    return "Essa conta do Google Ads não está ativa.";
+    return `Essa conta do Google Ads não está ativa.${sufixo}`;
   }
   return mensagem ? `Erro do Google Ads: ${mensagem}` : "O Google Ads recusou a requisição.";
 }
