@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, LogOut } from "lucide-react";
+import { LayoutDashboard, LogOut, Menu } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { PeopleLogo } from "@/components/PeopleLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -31,6 +31,14 @@ export function AppHeader({ perfil }: { perfil: Perfil | null }) {
 
 
         <div className="flex items-center gap-1 sm:gap-2">
+          <Link
+            to={equipe ? "/agencia/menu" : "/cliente/menu"}
+            title="Abrir menu"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-shell-foreground/70 transition-colors hover:bg-shell-2 hover:text-shell-foreground sm:text-sm"
+          >
+            <Menu className="size-4" />
+            <span className="hidden sm:inline">Abrir menu</span>
+          </Link>
           {equipe ? (
             <Link
               to="/agencia/visualizar"
