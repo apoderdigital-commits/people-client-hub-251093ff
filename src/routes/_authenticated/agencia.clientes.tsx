@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Instagram as InstagramIcon,
   KeyRound,
+  Link2,
   Loader2,
   Lock,
   Plus,
@@ -35,6 +36,14 @@ import {
   sincronizarMetricasInstagram,
   sincronizarMetricasMeta,
 } from "@/lib/clientes.functions";
+import {
+  salvarGa4PropertyId,
+  salvarGoogleAdsCustomerId,
+  salvarIntegracaoGoogle,
+  sincronizarMetricasGA4,
+  sincronizarMetricasGoogleAds,
+  statusIntegracaoGoogle,
+} from "@/lib/integracoes-google.functions";
 import {
   intervalo,
   lerMetricasConfig,
@@ -95,10 +104,17 @@ type Cliente = {
   servico_meta_ads: boolean;
   servico_google_ads: boolean;
   servico_gmn: boolean;
+  servico_ga4: boolean;
+  google_ads_customer_id: string | null;
+  google_ads_ultima_sincronizacao: string | null;
+  google_ads_erro_sincronizacao: string | null;
+  ga4_property_id: string | null;
+  ga4_ultima_sincronizacao: string | null;
+  ga4_erro_sincronizacao: string | null;
 };
 
 const COLUNAS =
-  "id, nome, identificador, ad_account_id, investimento_mensal, meta_faturamento, token_atualizado_em, ultima_sincronizacao, erro_sincronizacao, metricas_kpis, acao_lead, acao_conversao, instagram_business_account_id, instagram_ultima_sincronizacao, instagram_erro_sincronizacao, instagram_kpis, servico_grs, servico_meta_ads, servico_google_ads, servico_gmn";
+  "id, nome, identificador, ad_account_id, investimento_mensal, meta_faturamento, token_atualizado_em, ultima_sincronizacao, erro_sincronizacao, metricas_kpis, acao_lead, acao_conversao, instagram_business_account_id, instagram_ultima_sincronizacao, instagram_erro_sincronizacao, instagram_kpis, servico_grs, servico_meta_ads, servico_google_ads, servico_gmn, servico_ga4, google_ads_customer_id, google_ads_ultima_sincronizacao, google_ads_erro_sincronizacao, ga4_property_id, ga4_ultima_sincronizacao, ga4_erro_sincronizacao";
 
 /** types.ts é gerado pelo Lovable e ainda não conhece as colunas novas. */
 const db = supabase as unknown as SupabaseClient;
@@ -345,7 +361,9 @@ function Painel() {
 
   return (
     <div className="mt-7">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <IntegracaoGoogleConfig />
+
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex flex-1 items-center gap-2 rounded-xl border border-input bg-card px-3 py-2">
           <Search className="size-4 shrink-0 text-ink-muted" />
           <input
@@ -571,6 +589,10 @@ function ClienteCard({
 
           <Instagram cliente={cliente} onAtualizar={onAtualizar} />
 
+          <GoogleAdsCliente cliente={cliente} onAtualizar={onAtualizar} />
+
+          <Ga4Cliente cliente={cliente} onAtualizar={onAtualizar} />
+
           <AcessoCliente cliente={cliente} loginAtual={loginAtual} onLoginCriado={onLoginCriado} />
 
           <ConfigMetricas cliente={cliente} onAtualizar={onAtualizar} />
@@ -582,13 +604,433 @@ function ClienteCard({
   );
 }
 
-type ServicoChave = "servico_grs" | "servico_meta_ads" | "servico_google_ads" | "servico_gmn";
+/**
+ * Credenciais compartilhadas por toda a agência (Client ID/Secret, refresh
+ * token e developer token) pra Google Ads + GA4 — uma autorização OAuth só,
+ * gerada uma vez fora do sistema (OAuth Playground), serve pra todos os
+ * clientes. Cada cliente só precisa do próprio Customer ID / Property ID,
+ * configurado dentro do card dele.
+ */
+function IntegracaoGoogleConfig() {
+  const consultarStatus = useServerFn(statusIntegracaoGoogle);
+  const salvar = useServerFn(salvarIntegracaoGoogle);
+
+  const [aberto, setAberto] = useState(false);
+  const [configurado, setConfigurado] = useState(false);
+  const [atualizadoEm, setAtualizadoEm] = useState<string | null>(null);
+  const [carregando, setCarregando] = useState(true);
+
+  const [clientId, setClientId] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
+  const [developerToken, setDeveloperToken] = useState("");
+  const [loginCustomerId, setLoginCustomerId] = useState("");
+
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ativo = true;
+    consultarStatus({ data: {} })
+      .then((res) => {
+        if (!ativo) return;
+        setConfigurado(res.configurado);
+        setAtualizadoEm(res.atualizadoEm);
+        setLoginCustomerId(res.loginCustomerId ?? "");
+        setCarregando(false);
+      })
+      .catch(() => setCarregando(false));
+    return () => {
+      ativo = false;
+    };
+  }, [consultarStatus]);
+
+  async function salvarCredenciais() {
+    setSalvando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      await salvar({
+        data: {
+          client_id: clientId.trim(),
+          client_secret: clientSecret.trim(),
+          refresh_token: refreshToken.trim(),
+          developer_token: developerToken.trim(),
+          login_customer_id: loginCustomerId.trim(),
+        },
+      });
+      setConfigurado(true);
+      setAtualizadoEm(new Date().toISOString());
+      setClientId("");
+      setClientSecret("");
+      setRefreshToken("");
+      setDeveloperToken("");
+      setOk("Integração com o Google salva.");
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Não foi possível salvar a integração.");
+    }
+    setSalvando(false);
+  }
+
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-card">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        className="flex w-full items-center gap-3 p-5 text-left"
+      >
+        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-card-teal">
+          <Link2 className="size-4 text-brand-foreground" strokeWidth={2.2} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-ink">Integração Google (Ads + GA4)</p>
+          <p className="mt-0.5 truncate text-xs text-ink-muted">
+            {carregando
+              ? "Carregando…"
+              : configurado
+                ? `Configurada · atualizada em ${quando(atualizadoEm)}`
+                : "Ainda não configurada — nenhum cliente consegue sincronizar Google Ads ou GA4."}
+          </p>
+        </div>
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-ink-muted transition-transform", aberto && "rotate-180")}
+        />
+      </button>
+
+      {aberto ? (
+        <div className="border-t border-border p-5">
+          <p className="text-xs text-ink-muted">
+            Gerados uma vez no Google Cloud Console + OAuth Playground. Vale pra todos os
+            clientes — não precisa refazer por cliente.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className="text-xs font-medium text-ink-muted">Client ID</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                placeholder={configurado ? "••••••••  (deixe em branco para manter)" : "xxxxx.apps.googleusercontent.com"}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-ink-muted">Client Secret</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                placeholder={configurado ? "••••••••  (deixe em branco para manter)" : "GOCSPX-..."}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-ink-muted">Refresh Token</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={refreshToken}
+                onChange={(e) => setRefreshToken(e.target.value)}
+                placeholder={configurado ? "••••••••  (deixe em branco para manter)" : "1//..."}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-ink-muted">Developer Token (Google Ads)</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={developerToken}
+                onChange={(e) => setDeveloperToken(e.target.value)}
+                placeholder={configurado ? "••••••••  (deixe em branco para manter)" : "..."}
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+              />
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="text-xs font-medium text-ink-muted">
+                Login Customer ID (conta gerenciadora / MCC)
+              </span>
+              <input
+                value={loginCustomerId}
+                onChange={(e) => setLoginCustomerId(e.target.value)}
+                placeholder="123-456-7890"
+                className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+              />
+              <span className="mt-1 block text-[11px] text-ink-muted">
+                Necessário quando as contas de anúncio dos clientes são acessadas através de uma
+                conta gerenciadora.
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void salvarCredenciais()}
+              disabled={
+                salvando ||
+                (!clientId.trim() && !configurado) ||
+                (!refreshToken.trim() && !configurado)
+              }
+              className="inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-brand-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+            >
+              {salvando ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+              {salvando ? "Validando com o Google…" : "Salvar integração"}
+            </button>
+          </div>
+
+          {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
+          {ok ? <p className="mt-2 text-sm text-success">{ok}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Bloco de integração do Google Ads dentro do card do cliente: só o Customer ID. */
+function GoogleAdsCliente({
+  cliente,
+  onAtualizar,
+}: {
+  cliente: Cliente;
+  onAtualizar: (mudancas: Partial<Cliente>) => void;
+}) {
+  const salvarId = useServerFn(salvarGoogleAdsCustomerId);
+  const sincronizar = useServerFn(sincronizarMetricasGoogleAds);
+  const [customerId, setCustomerId] = useState(cliente.google_ads_customer_id ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const configurado = Boolean(cliente.google_ads_customer_id);
+
+  async function salvar() {
+    const limpo = customerId.trim();
+    if (!limpo) return;
+    setSalvando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      const res = await salvarId({ data: { clienteId: cliente.id, customerId: limpo } });
+      onAtualizar({ google_ads_customer_id: limpo, google_ads_erro_sincronizacao: null });
+      setOk(`Conta validada: "${res.conta}".`);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Não foi possível salvar o Customer ID.");
+    }
+    setSalvando(false);
+  }
+
+  async function puxar() {
+    setSincronizando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      const janela = intervalo("30d");
+      const res = await sincronizar({
+        data: { clienteId: cliente.id, desde: janela.desde, ate: janela.ate },
+      });
+      onAtualizar({
+        google_ads_ultima_sincronizacao: new Date().toISOString(),
+        google_ads_erro_sincronizacao: null,
+      });
+      setOk(
+        res.dias > 0
+          ? `${res.dias} dias de métricas atualizados, ${res.campanhas} campanhas.`
+          : "O Google Ads não devolveu dados para este período.",
+      );
+    } catch (err) {
+      const mensagem = err instanceof Error ? err.message : "Falha ao sincronizar.";
+      setErro(mensagem);
+      onAtualizar({ google_ads_erro_sincronizacao: mensagem });
+    }
+    setSincronizando(false);
+  }
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Google Ads</p>
+        <span className="text-[11px] text-ink-muted">
+          {configurado ? "Customer ID configurado" : "Sem Customer ID"} · última sincronização:{" "}
+          {quando(cliente.google_ads_ultima_sincronizacao)}
+        </span>
+      </div>
+
+      {cliente.google_ads_erro_sincronizacao ? (
+        <p className="mt-3 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          {cliente.google_ads_erro_sincronizacao}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="min-w-[220px] flex-1">
+          <span className="text-xs font-medium text-ink-muted">Customer ID</span>
+          <input
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+            placeholder="123-456-7890"
+            className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void salvar()}
+          disabled={salvando || customerId.trim().length === 0}
+          className="inline-flex items-center gap-2 rounded-xl border border-input px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand disabled:opacity-60"
+        >
+          {salvando ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+          {salvando ? "Validando…" : "Salvar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void puxar()}
+          disabled={sincronizando || !configurado}
+          className="inline-flex items-center gap-2 rounded-xl border border-input px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand disabled:opacity-60"
+        >
+          <RefreshCw className={`size-4 ${sincronizando ? "animate-spin" : ""}`} />
+          {sincronizando ? "Sincronizando…" : "Sincronizar"}
+        </button>
+      </div>
+
+      {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
+      {ok ? <p className="mt-2 text-sm text-success">{ok}</p> : null}
+    </div>
+  );
+}
+
+/** Bloco de integração do GA4 dentro do card do cliente: só o Property ID. */
+function Ga4Cliente({
+  cliente,
+  onAtualizar,
+}: {
+  cliente: Cliente;
+  onAtualizar: (mudancas: Partial<Cliente>) => void;
+}) {
+  const salvarId = useServerFn(salvarGa4PropertyId);
+  const sincronizar = useServerFn(sincronizarMetricasGA4);
+  const [propertyId, setPropertyId] = useState(cliente.ga4_property_id ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [sincronizando, setSincronizando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
+
+  const configurado = Boolean(cliente.ga4_property_id);
+
+  async function salvar() {
+    const limpo = propertyId.trim();
+    if (!limpo) return;
+    setSalvando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      await salvarId({ data: { clienteId: cliente.id, propertyId: limpo } });
+      onAtualizar({ ga4_property_id: limpo, ga4_erro_sincronizacao: null });
+      setOk("Property ID validado.");
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Não foi possível salvar o Property ID.");
+    }
+    setSalvando(false);
+  }
+
+  async function puxar() {
+    setSincronizando(true);
+    setErro(null);
+    setOk(null);
+    try {
+      const janela = intervalo("30d");
+      const res = await sincronizar({
+        data: { clienteId: cliente.id, desde: janela.desde, ate: janela.ate },
+      });
+      onAtualizar({
+        ga4_ultima_sincronizacao: new Date().toISOString(),
+        ga4_erro_sincronizacao: null,
+      });
+      setOk(
+        res.dias > 0
+          ? `${res.dias} dias de métricas atualizados.`
+          : "O GA4 não devolveu dados para este período.",
+      );
+    } catch (err) {
+      const mensagem = err instanceof Error ? err.message : "Falha ao sincronizar.";
+      setErro(mensagem);
+      onAtualizar({ ga4_erro_sincronizacao: mensagem });
+    }
+    setSincronizando(false);
+  }
+
+  return (
+    <div className="mt-4 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Google Analytics (GA4)
+        </p>
+        <span className="text-[11px] text-ink-muted">
+          {configurado ? "Property ID configurado" : "Sem Property ID"} · última sincronização:{" "}
+          {quando(cliente.ga4_ultima_sincronizacao)}
+        </span>
+      </div>
+
+      {cliente.ga4_erro_sincronizacao ? (
+        <p className="mt-3 flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          {cliente.ga4_erro_sincronizacao}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="min-w-[220px] flex-1">
+          <span className="text-xs font-medium text-ink-muted">Property ID</span>
+          <input
+            value={propertyId}
+            onChange={(e) => setPropertyId(e.target.value)}
+            placeholder="123456789"
+            className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-brand"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => void salvar()}
+          disabled={salvando || propertyId.trim().length === 0}
+          className="inline-flex items-center gap-2 rounded-xl border border-input px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand disabled:opacity-60"
+        >
+          {salvando ? <Loader2 className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+          {salvando ? "Validando…" : "Salvar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void puxar()}
+          disabled={sincronizando || !configurado}
+          className="inline-flex items-center gap-2 rounded-xl border border-input px-4 py-2 text-sm font-semibold text-ink transition-colors hover:border-brand disabled:opacity-60"
+        >
+          <RefreshCw className={`size-4 ${sincronizando ? "animate-spin" : ""}`} />
+          {sincronizando ? "Sincronizando…" : "Sincronizar"}
+        </button>
+      </div>
+
+      {erro ? <p className="mt-2 text-sm text-destructive">{erro}</p> : null}
+      {ok ? <p className="mt-2 text-sm text-success">{ok}</p> : null}
+    </div>
+  );
+}
+
+type ServicoChave =
+  | "servico_grs"
+  | "servico_meta_ads"
+  | "servico_google_ads"
+  | "servico_gmn"
+  | "servico_ga4";
 
 const SERVICOS: { chave: ServicoChave; label: string }[] = [
   { chave: "servico_grs", label: "GRS" },
   { chave: "servico_meta_ads", label: "Meta Ads" },
   { chave: "servico_google_ads", label: "Google Ads" },
   { chave: "servico_gmn", label: "GMN" },
+  { chave: "servico_ga4", label: "GA4" },
 ];
 
 /**
