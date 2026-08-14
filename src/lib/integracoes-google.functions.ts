@@ -5,11 +5,17 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { permissoesEfetivas, podeEditar, type EquipeRole } from "@/lib/equipe";
 import type { IntegracaoGoogle } from "@/lib/google.server";
 
+/**
+ * Os 4 segredos aceitam vazio de propósito: em branco significa "manter o
+ * valor já salvo" (o formulário nunca reexibe o que já está guardado), não
+ * "apagar". A validação de que pelo menos um valor (novo ou existente) precisa
+ * existir acontece no handler, depois de mesclar com o que já está no banco.
+ */
 const integracaoSchema = z.object({
-  client_id: z.string().trim().min(1).max(200),
-  client_secret: z.string().trim().min(1).max(200),
-  refresh_token: z.string().trim().min(1).max(500),
-  developer_token: z.string().trim().min(1).max(200),
+  client_id: z.string().trim().max(200).default(""),
+  client_secret: z.string().trim().max(200).default(""),
+  refresh_token: z.string().trim().max(500).default(""),
+  developer_token: z.string().trim().max(200).default(""),
   login_customer_id: z.string().trim().max(60).default(""),
 });
 
@@ -81,13 +87,26 @@ export const salvarIntegracaoGoogle = createServerFn({ method: "POST" })
     await exigirEdicaoDeClientes(context.supabase as unknown as SupabaseClient, context.userId);
     const db = await admin();
 
+    const { data: existente } = await db
+      .from("integracoes_google")
+      .select("client_id, client_secret, refresh_token, developer_token")
+      .eq("id", true)
+      .maybeSingle();
+    const atual = existente as Partial<IntegracaoGoogle> | null;
+
     const config: IntegracaoGoogle = {
-      client_id: data.client_id,
-      client_secret: data.client_secret,
-      refresh_token: data.refresh_token,
-      developer_token: data.developer_token,
+      client_id: data.client_id || atual?.client_id || "",
+      client_secret: data.client_secret || atual?.client_secret || "",
+      refresh_token: data.refresh_token || atual?.refresh_token || "",
+      developer_token: data.developer_token || atual?.developer_token || "",
       login_customer_id: data.login_customer_id || null,
     };
+
+    if (!config.client_id || !config.client_secret || !config.refresh_token || !config.developer_token) {
+      throw new Error(
+        "Preencha Client ID, Client Secret, Refresh Token e Developer Token na primeira configuração.",
+      );
+    }
 
     // Valida antes de salvar: sem isso, um valor errado só apareceria no
     // primeiro cliente que tentasse sincronizar.
