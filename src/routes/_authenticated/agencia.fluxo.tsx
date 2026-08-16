@@ -35,8 +35,13 @@ import {
   type Vinculo,
 } from "@/lib/fluxo";
 
+type FluxoSearch = { cartao?: string };
+
 export const Route = createFileRoute("/_authenticated/agencia/fluxo")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>): FluxoSearch => ({
+    cartao: typeof search.cartao === "string" ? search.cartao : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Fluxo People — Quadro de produção" },
@@ -128,7 +133,24 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
   const [erro, setErro] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
   const [novaColuna, setNovaColuna] = useState("");
-  const [abertoId, setAbertoId] = useState<string | null>(null);
+
+  const searchParams = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const [abertoId, setAbertoId] = useState<string | null>(searchParams.cartao ?? null);
+
+  /**
+   * Abre/fecha o cartão e mantém a URL em sincronia (`?cartao=id`), pra dar
+   * pra linkar direto pra um cartão específico — usado no painel inicial.
+   */
+  function abrirCartao(id: string) {
+    setAbertoId(id);
+    void navigate({ to: ".", search: (prev) => ({ ...prev, cartao: id }), replace: true });
+  }
+
+  function fecharCartao() {
+    setAbertoId(null);
+    void navigate({ to: ".", search: (prev) => ({ ...prev, cartao: undefined }), replace: true });
+  }
 
   const carregarContadores = useCallback(async () => {
     const [ck, cm, ax] = await Promise.all([
@@ -265,7 +287,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
   }
 
   async function removerCartao(id: string) {
-    setAbertoId(null);
+    fecharCartao();
     setCartoes((atual) => atual.filter((c) => c.id !== id));
     setVinculos((atual) => atual.filter((v) => v.cartao_id !== id));
     const { error } = await db.from("fluxo_cartoes").delete().eq("id", id);
@@ -447,7 +469,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
             editavel={editavel}
             arrastando={arrastando}
             onArrastar={setArrastando}
-            onAbrir={setAbertoId}
+            onAbrir={abrirCartao}
             onCriarCartao={criarCartao}
             onMoverCartao={moverCartao}
             onRenomear={renomearColuna}
@@ -495,7 +517,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
             .map((v) => v.etiqueta_id)}
           perfilId={perfilId}
           editavel={editavel}
-          onFechar={() => setAbertoId(null)}
+          onFechar={fecharCartao}
           onAtualizar={atualizarCartao}
           onRemover={removerCartao}
           onMover={moverCartao}

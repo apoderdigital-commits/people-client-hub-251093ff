@@ -244,6 +244,7 @@ function PainelPorFuncao({
         {atrasados.map((c) => (
           <LinhaCartao
             key={c.id}
+            cartaoId={c.id}
             titulo={c.titulo}
             clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
             atrasado
@@ -274,6 +275,7 @@ function PainelPorFuncao({
               return (
                 <LinhaCartao
                   key={c.id}
+                  cartaoId={c.id}
                   titulo={c.titulo}
                   clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
                   extra={colunaPorId.get(c.coluna_id)?.nome}
@@ -301,6 +303,7 @@ function PainelPorFuncao({
             {paraAprovar.map((c) => (
               <LinhaCartao
                 key={c.id}
+                cartaoId={c.id}
                 titulo={c.titulo}
                 clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
                 extra="Produção pronta ou ajuste pedido pelo cliente"
@@ -313,6 +316,7 @@ function PainelPorFuncao({
             {aguardandoCliente.map((c) => (
               <LinhaCartao
                 key={c.id}
+                cartaoId={c.id}
                 titulo={c.titulo}
                 clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
               />
@@ -335,6 +339,7 @@ function PainelPorFuncao({
             {paraRevisar.map((c) => (
               <LinhaCartao
                 key={c.id}
+                cartaoId={c.id}
                 titulo={c.titulo}
                 clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
               />
@@ -377,6 +382,7 @@ function PainelPorFuncao({
             {meusCartoes.slice(0, 8).map((c) => (
               <LinhaCartao
                 key={c.id}
+                cartaoId={c.id}
                 titulo={c.titulo}
                 clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
                 extra={colunaPorId.get(c.coluna_id)?.nome}
@@ -492,20 +498,23 @@ function Secao({
 }
 
 function LinhaCartao({
+  cartaoId,
   titulo,
   clienteNome,
   extra,
   atrasado,
   novo,
 }: {
+  /** Quando informado, a linha vira um link direto pro cartão no Fluxo People. */
+  cartaoId?: string;
   titulo: string;
   clienteNome?: string | null;
   extra?: string | null;
   atrasado?: boolean;
   novo?: boolean;
 }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+  const conteudo = (
+    <>
       <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{titulo}</span>
       {clienteNome ? (
         <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
@@ -524,6 +533,24 @@ function LinhaCartao({
           Novo
         </span>
       ) : null}
+    </>
+  );
+
+  if (cartaoId) {
+    return (
+      <Link
+        to="/agencia/fluxo"
+        search={{ cartao: cartaoId }}
+        className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-card transition-colors hover:border-brand"
+      >
+        {conteudo}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+      {conteudo}
     </div>
   );
 }
