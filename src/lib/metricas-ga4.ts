@@ -9,8 +9,23 @@ export const CANAIS: { id: CanalId; label: string }[] = [
   { id: "outros", label: "Outros canais" },
 ];
 
-function ehGrupoPago(grupoCanal: string): boolean {
-  return grupoCanal.includes("paid") || grupoCanal === "cross-network";
+/**
+ * Em vez de listar quais grupos de canal são pagos (lista que fica velha
+ * toda vez que o Google cria um grupo novo — "Display" não tem "paid" no
+ * nome, mas é pago), listamos os grupos que são claramente NÃO pagos e
+ * tratamos todo o resto como pago.
+ */
+function ehGrupoNaoPago(grupoCanal: string): boolean {
+  return (
+    grupoCanal.includes("organic") ||
+    grupoCanal === "direct" ||
+    grupoCanal === "referral" ||
+    grupoCanal === "email" ||
+    grupoCanal === "affiliates" ||
+    grupoCanal === "unassigned" ||
+    grupoCanal === "sms" ||
+    grupoCanal.includes("push")
+  );
 }
 
 /**
@@ -18,18 +33,20 @@ function ehGrupoPago(grupoCanal: string): boolean {
  * grupos do dashboard.
  *
  * Não dá pra usar só o grupo de canal: campanhas do Google Ads que não são
- * de Pesquisa (Performance Max, Shopping, Display) caem em grupos como
- * "Cross-network", não em "Paid Search" — por isso a origem da sessão
- * (`google`) importa tanto quanto o grupo. Mesma lógica pro Meta: assume que
- * é o único canal pago de rede social do cliente — se algum dia rodar
- * anúncio pago em outra rede social, ele cairia aqui também.
+ * de Pesquisa (Performance Max, Shopping, Display, YouTube) caem em grupos
+ * como "Cross-network", "Display" ou "Paid Video", não em "Paid Search" —
+ * por isso a origem da sessão importa tanto quanto o grupo. Vídeo do
+ * YouTube usa `youtube`/`youtube.com` como origem, não `google`. Mesma
+ * lógica pro Meta: assume que é o único canal pago de rede social do
+ * cliente — se algum dia rodar anúncio pago em outra rede social, ele
+ * cairia aqui também.
  */
 export function agruparCanal(fonteBruta: string, canalBruto: string): CanalId {
   const fonte = fonteBruta.trim().toLowerCase();
   const canal = canalBruto.trim().toLowerCase();
-  const pago = ehGrupoPago(canal);
+  const pago = !ehGrupoNaoPago(canal);
 
-  if (pago && fonte === "google") return "google_ads";
+  if (pago && /^google$|youtube/.test(fonte)) return "google_ads";
   if (pago && /facebook|instagram|(^|\W)fb(\W|$)|(^|\W)ig(\W|$)|meta/.test(fonte)) return "meta";
   if (canal.includes("organic")) return "organico";
   return "outros";
