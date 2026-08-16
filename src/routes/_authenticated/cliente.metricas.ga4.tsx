@@ -185,6 +185,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
     try {
       const res = await sincronizar({ data: { clienteId, desde: janela.desde, ate: janela.ate } });
       setAviso(`${res.dias} dias de métricas atualizados direto do GA4.`);
+      if (res.avisoCanal) setErro(`Sessões por canal: ${res.avisoCanal}`);
       await carregar();
     } catch (err) {
       setErro(err instanceof Error ? err.message : "Não foi possível sincronizar.");

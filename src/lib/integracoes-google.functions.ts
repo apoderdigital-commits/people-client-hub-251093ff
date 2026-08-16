@@ -309,7 +309,10 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
     }
 
     // Sessões por canal: consulta separada, então uma falha aqui não deve
-    // derrubar a sincronização principal — o painel só fica sem essa quebra.
+    // derrubar a sincronização principal — mas o motivo da falha ainda
+    // precisa aparecer pra alguém, senão o painel fica com dado velho sem
+    // ninguém saber por quê.
+    let avisoCanal: string | undefined;
     try {
       const porCanal = await ga4.buscarSessoesPorCanal(config, propertyId, data.desde, data.ate);
       const paraGravarCanal = porCanal.map((l) => ({
@@ -321,12 +324,15 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
         atualizado_em: new Date().toISOString(),
       }));
       if (paraGravarCanal.length > 0) {
-        await db
+        const { error: erroCanal } = await db
           .from("metricas_ga4_canais")
           .upsert(paraGravarCanal, { onConflict: "cliente_id,canal,fonte,data" });
+        if (erroCanal) {
+          avisoCanal = erroDoBanco(erroCanal, "Sessões por canal obtidas, mas não gravadas.");
+        }
       }
-    } catch {
-      // best-effort
+    } catch (err) {
+      avisoCanal = err instanceof Error ? err.message : "Falha ao buscar sessões por canal.";
     }
 
     await db
@@ -334,5 +340,5 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
       .update({ ga4_ultima_sincronizacao: new Date().toISOString(), ga4_erro_sincronizacao: null })
       .eq("id", data.clienteId);
 
-    return { dias: paraGravar.length };
+    return { dias: paraGravar.length, avisoCanal };
   });
