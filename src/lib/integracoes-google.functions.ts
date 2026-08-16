@@ -308,6 +308,26 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
       }
     }
 
+    // Sessões por canal: consulta separada, então uma falha aqui não deve
+    // derrubar a sincronização principal — o painel só fica sem essa quebra.
+    try {
+      const porCanal = await ga4.buscarSessoesPorCanal(config, propertyId, data.desde, data.ate);
+      const paraGravarCanal = porCanal.map((l) => ({
+        cliente_id: data.clienteId,
+        canal: l.canal,
+        data: l.data,
+        sessoes: l.sessoes,
+        atualizado_em: new Date().toISOString(),
+      }));
+      if (paraGravarCanal.length > 0) {
+        await db
+          .from("metricas_ga4_canais")
+          .upsert(paraGravarCanal, { onConflict: "cliente_id,canal,data" });
+      }
+    } catch {
+      // best-effort
+    }
+
     await db
       .from("clientes")
       .update({ ga4_ultima_sincronizacao: new Date().toISOString(), ga4_erro_sincronizacao: null })

@@ -137,3 +137,32 @@ export async function buscarInsightsDiarios(
     conversoes: numero(l.metricValues?.[6]?.value),
   }));
 }
+
+export type InsightCanalGA4 = { data: string; canal: string; sessoes: number };
+
+/**
+ * Sessões diárias por canal padrão do GA4 (`sessionDefaultChannelGroup`) —
+ * "Paid Social", "Paid Search", "Organic Search" etc. O agrupamento em
+ * Meta/Google Ads/Orgânico/Outros acontece na leitura (`lib/metricas-ga4.ts`),
+ * não aqui: o valor bruto do GA4 fica guardado, então mudar essa regra no
+ * futuro não exige ressincronizar.
+ */
+export async function buscarSessoesPorCanal(
+  config: IntegracaoGoogle,
+  propertyId: string,
+  desde: string,
+  ate: string,
+): Promise<InsightCanalGA4[]> {
+  const linhas = await relatorio(config, propertyId, {
+    dateRanges: [{ startDate: desde, endDate: ate }],
+    dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
+    metrics: [{ name: "sessions" }],
+    orderBys: [{ dimension: { dimensionName: "date" } }],
+  });
+
+  return linhas.map((l) => ({
+    data: formatarData(l.dimensionValues?.[0]?.value),
+    canal: l.dimensionValues?.[1]?.value ?? "",
+    sessoes: numero(l.metricValues?.[0]?.value),
+  }));
+}

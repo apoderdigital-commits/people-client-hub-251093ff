@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Instagram, Lock, MapPin, Megaphone, Search, type LucideIcon, ChevronLeft } from "lucide-react";
+import {
+  BarChart3,
+  ChevronLeft,
+  Instagram,
+  Lock,
+  MapPin,
+  Megaphone,
+  Search,
+  type LucideIcon,
+} from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppHeader } from "@/components/AppHeader";
 import { MenuCard, type MenuCardColor } from "@/components/MenuCard";
@@ -43,7 +52,7 @@ type ServicoBloqueado = {
    */
   classeFundo: string;
   classeBorda: string;
-  to: "/cliente/metricas/google-ads" | "/cliente/metricas/gmn";
+  to: "/cliente/metricas/google-ads" | "/cliente/metricas/gmn" | "/cliente/metricas/ga4";
   mensagemVenda: string;
 };
 
@@ -69,6 +78,18 @@ const GMN: ServicoBloqueado = {
   to: "/cliente/metricas/gmn",
   mensagemVenda:
     "Apareça melhor nas buscas e no mapa do Google. Fale com a sua agência para contratar o Google Meu Negócio e liberar esse dashboard.",
+};
+
+const GA4: ServicoBloqueado = {
+  titulo: "Google Analytics (GA4)",
+  descricao: "Sessões do seu site por canal: Meta, Google Ads, orgânico e outras origens.",
+  icone: BarChart3,
+  cor: "indigo",
+  classeFundo: "bg-card-indigo",
+  classeBorda: "border-card-indigo/30",
+  to: "/cliente/metricas/ga4",
+  mensagemVenda:
+    "Entenda de onde vem o tráfego do seu site. Fale com a sua agência para contratar o Google Analytics (GA4) e liberar esse dashboard.",
 };
 
 function MetricasMenu() {
@@ -106,7 +127,7 @@ function MetricasMenu() {
 
 function Menu({ perfil }: { perfil: Perfil }) {
   const { cliente: selecionado, pronto } = useClienteSelecionado();
-  const [servicos, setServicos] = useState({ google_ads: false, gmn: false });
+  const [servicos, setServicos] = useState({ google_ads: false, gmn: false, ga4: false });
 
   const clienteId = perfil.role === "agencia" ? (selecionado?.cliente_id ?? null) : perfil.cliente_id;
 
@@ -114,15 +135,20 @@ function Menu({ perfil }: { perfil: Perfil }) {
     if (!pronto || !clienteId) return;
     let ativo = true;
     db.from("clientes")
-      .select("servico_google_ads, servico_gmn")
+      .select("servico_google_ads, servico_gmn, servico_ga4")
       .eq("id", clienteId)
       .maybeSingle()
       .then(({ data }) => {
         if (!ativo) return;
-        const c = data as { servico_google_ads?: boolean; servico_gmn?: boolean } | null;
+        const c = data as {
+          servico_google_ads?: boolean;
+          servico_gmn?: boolean;
+          servico_ga4?: boolean;
+        } | null;
         setServicos({
           google_ads: Boolean(c?.servico_google_ads),
           gmn: Boolean(c?.servico_gmn),
+          ga4: Boolean(c?.servico_ga4),
         });
       });
     return () => {
@@ -171,6 +197,18 @@ function Menu({ perfil }: { perfil: Perfil }) {
         />
       ) : (
         <CardBloqueado servico={GMN} />
+      )}
+      {servicos.ga4 ? (
+        <MenuCard
+          titulo={GA4.titulo}
+          descricao={GA4.descricao}
+          icone={GA4.icone}
+          cor={GA4.cor}
+          badge="Ativo"
+          to={GA4.to}
+        />
+      ) : (
+        <CardBloqueado servico={GA4} />
       )}
     </div>
   );
