@@ -9,16 +9,28 @@ export const CANAIS: { id: CanalId; label: string }[] = [
   { id: "outros", label: "Outros canais" },
 ];
 
+function ehGrupoPago(grupoCanal: string): boolean {
+  return grupoCanal.includes("paid") || grupoCanal === "cross-network";
+}
+
 /**
- * Mapeia o `sessionDefaultChannelGroup` bruto do GA4 pros 4 grupos do
- * dashboard. "Paid Social" vira Meta assumindo que Meta é o único canal pago
- * de social do cliente — se algum dia rodar anúncio pago em outra rede
- * social, ele cairia aqui também.
+ * Mapeia a origem (`sessionSource`) + o grupo de canal padrão do GA4 pros 4
+ * grupos do dashboard.
+ *
+ * Não dá pra usar só o grupo de canal: campanhas do Google Ads que não são
+ * de Pesquisa (Performance Max, Shopping, Display) caem em grupos como
+ * "Cross-network", não em "Paid Search" — por isso a origem da sessão
+ * (`google`) importa tanto quanto o grupo. Mesma lógica pro Meta: assume que
+ * é o único canal pago de rede social do cliente — se algum dia rodar
+ * anúncio pago em outra rede social, ele cairia aqui também.
  */
-export function agruparCanal(canalBruto: string): CanalId {
-  const c = canalBruto.trim().toLowerCase();
-  if (c === "paid social") return "meta";
-  if (c === "paid search") return "google_ads";
-  if (c.includes("organic")) return "organico";
+export function agruparCanal(fonteBruta: string, canalBruto: string): CanalId {
+  const fonte = fonteBruta.trim().toLowerCase();
+  const canal = canalBruto.trim().toLowerCase();
+  const pago = ehGrupoPago(canal);
+
+  if (pago && fonte === "google") return "google_ads";
+  if (pago && /facebook|instagram|(^|\W)fb(\W|$)|(^|\W)ig(\W|$)|meta/.test(fonte)) return "meta";
+  if (canal.includes("organic")) return "organico";
   return "outros";
 }

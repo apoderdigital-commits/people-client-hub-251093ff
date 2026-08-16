@@ -315,6 +315,7 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
       const paraGravarCanal = porCanal.map((l) => ({
         cliente_id: data.clienteId,
         canal: l.canal,
+        fonte: l.fonte,
         data: l.data,
         sessoes: l.sessoes,
         atualizado_em: new Date().toISOString(),
@@ -322,7 +323,7 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
       if (paraGravarCanal.length > 0) {
         await db
           .from("metricas_ga4_canais")
-          .upsert(paraGravarCanal, { onConflict: "cliente_id,canal,data" });
+          .upsert(paraGravarCanal, { onConflict: "cliente_id,canal,fonte,data" });
       }
     } catch {
       // best-effort

@@ -138,14 +138,18 @@ export async function buscarInsightsDiarios(
   }));
 }
 
-export type InsightCanalGA4 = { data: string; canal: string; sessoes: number };
+export type InsightCanalGA4 = { data: string; canal: string; fonte: string; sessoes: number };
 
 /**
- * Sessões diárias por canal padrão do GA4 (`sessionDefaultChannelGroup`) —
- * "Paid Social", "Paid Search", "Organic Search" etc. O agrupamento em
- * Meta/Google Ads/Orgânico/Outros acontece na leitura (`lib/metricas-ga4.ts`),
- * não aqui: o valor bruto do GA4 fica guardado, então mudar essa regra no
- * futuro não exige ressincronizar.
+ * Sessões diárias por canal padrão do GA4 (`sessionDefaultChannelGroup`) e
+ * origem (`sessionSource`) — "Paid Social" via facebook, "Cross-network" via
+ * google (Performance Max), "Paid Search" via google, "Organic Search" etc.
+ * O agrupamento em Meta/Google Ads/Orgânico/Outros acontece na leitura
+ * (`lib/metricas-ga4.ts`), não aqui: os valores brutos do GA4 ficam
+ * guardados, então mudar essa regra no futuro não exige ressincronizar.
+ * Precisa das duas dimensões porque campanhas do Google Ads que não são de
+ * Pesquisa (Performance Max, Shopping, Display) não caem em "Paid Search" —
+ * caem em grupos diferentes, mas todas têm `sessionSource = "google"`.
  */
 export async function buscarSessoesPorCanal(
   config: IntegracaoGoogle,
@@ -155,14 +159,15 @@ export async function buscarSessoesPorCanal(
 ): Promise<InsightCanalGA4[]> {
   const linhas = await relatorio(config, propertyId, {
     dateRanges: [{ startDate: desde, endDate: ate }],
-    dimensions: [{ name: "date" }, { name: "sessionDefaultChannelGroup" }],
+    dimensions: [{ name: "date" }, { name: "sessionSource" }, { name: "sessionDefaultChannelGroup" }],
     metrics: [{ name: "sessions" }],
     orderBys: [{ dimension: { dimensionName: "date" } }],
   });
 
   return linhas.map((l) => ({
     data: formatarData(l.dimensionValues?.[0]?.value),
-    canal: l.dimensionValues?.[1]?.value ?? "",
+    fonte: l.dimensionValues?.[1]?.value ?? "",
+    canal: l.dimensionValues?.[2]?.value ?? "",
     sessoes: numero(l.metricValues?.[0]?.value),
   }));
 }

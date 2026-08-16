@@ -58,7 +58,7 @@ type LinhaDiaria = {
   duracao_media_sessao: number;
 };
 
-type LinhaCanal = { data: string; canal: string; sessoes: number };
+type LinhaCanal = { data: string; canal: string; fonte: string; sessoes: number };
 
 type Totais = {
   sessoes: number;
@@ -142,7 +142,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
         .lte("data", janela.ate),
       db
         .from("metricas_ga4_canais")
-        .select("data, canal, sessoes")
+        .select("data, canal, fonte, sessoes")
         .eq("cliente_id", clienteId)
         .gte("data", anterior.desde)
         .lte("data", janela.ate),
@@ -211,7 +211,7 @@ function Painel({ perfil }: { perfil: Perfil }) {
 
     function somarCanais(ls: LinhaCanal[]): Record<CanalId, number> {
       const base: Record<CanalId, number> = { meta: 0, google_ads: 0, organico: 0, outros: 0 };
-      for (const l of ls) base[agruparCanal(l.canal)] += l.sessoes;
+      for (const l of ls) base[agruparCanal(l.fonte, l.canal)] += l.sessoes;
       return base;
     }
 
