@@ -323,10 +323,21 @@ export const sincronizarMetricasGA4 = createServerFn({ method: "POST" })
         sessoes: l.sessoes,
         atualizado_em: new Date().toISOString(),
       }));
-      if (paraGravarCanal.length > 0) {
-        const { error: erroCanal } = await db
-          .from("metricas_ga4_canais")
-          .upsert(paraGravarCanal, { onConflict: "cliente_id,canal,fonte,data" });
+
+      // Apaga o período antes de regravar: a quebra por canal do GA4 é um
+      // retrato completo do dia, não algo que dá pra mesclar por chave — se
+      // a lista de canais/fontes que o Google devolve mudar de um dia pro
+      // outro, um upsert deixaria linhas velhas órfãs somando junto.
+      const { error: erroLimpeza } = await db
+        .from("metricas_ga4_canais")
+        .delete()
+        .eq("cliente_id", data.clienteId)
+        .gte("data", data.desde)
+        .lte("data", data.ate);
+      if (erroLimpeza) {
+        avisoCanal = erroDoBanco(erroLimpeza, "Não foi possível limpar as sessões por canal antigas.");
+      } else if (paraGravarCanal.length > 0) {
+        const { error: erroCanal } = await db.from("metricas_ga4_canais").insert(paraGravarCanal);
         if (erroCanal) {
           avisoCanal = erroDoBanco(erroCanal, "Sessões por canal obtidas, mas não gravadas.");
         }
