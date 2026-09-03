@@ -273,7 +273,12 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
   async function criarCartao(colunaId: string, titulo: string) {
     const { data, error } = await db
       .from("fluxo_cartoes")
-      .insert({ coluna_id: colunaId, titulo, ordem: (porColuna.get(colunaId) ?? []).length })
+      .insert({
+        coluna_id: colunaId,
+        titulo,
+        ordem: (porColuna.get(colunaId) ?? []).length,
+        criado_por: perfilId,
+      })
       .select(COLUNAS_CARTAO)
       .single();
     if (error) return setErro("Não foi possível criar o cartão.");

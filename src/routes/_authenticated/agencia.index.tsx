@@ -87,6 +87,7 @@ type CartaoBruto = {
   entrega_arte: string | null;
   agendamento: string | null;
   publicacao: string | null;
+  criado_por: string | null;
 };
 type VinculoBruto = { cartao_id: string; perfil_id: string; created_at?: string };
 type ClienteRef = { id: string; nome: string };
@@ -113,7 +114,7 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
         db
           .from("fluxo_cartoes")
           .select(
-            "id, titulo, cliente_id, coluna_id, prazo, entrega_texto, entrega_arte, agendamento, publicacao",
+            "id, titulo, cliente_id, coluna_id, prazo, entrega_texto, entrega_arte, agendamento, publicacao, criado_por",
           ),
         db.from("fluxo_responsaveis").select("cartao_id, perfil_id, created_at"),
         db.from("clientes").select("id, nome"),
@@ -253,6 +254,26 @@ function PainelPorFuncao({
       </Secao>
     ) : null;
 
+  // Cartões que a própria pessoa criou e que agora estão parados esperando o
+  // cliente aprovar — independente da função dela, é sempre relevante saber
+  // que algo que ela montou está com o cliente.
+  const criadosAguardandoCliente = colRevisaoCliente
+    ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id && c.criado_por === perfil.id)
+    : [];
+  const secaoCriadosAguardandoCliente =
+    criadosAguardandoCliente.length > 0 ? (
+      <Secao icone={ClipboardCheck} titulo="Cartões que você criou, aguardando o cliente">
+        {criadosAguardandoCliente.map((c) => (
+          <LinhaCartao
+            key={c.id}
+            cartaoId={c.id}
+            titulo={c.titulo}
+            clienteNome={c.cliente_id ? clientePorId.get(c.cliente_id) : null}
+          />
+        ))}
+      </Secao>
+    ) : null;
+
   let conteudo: React.ReactNode;
   let temAlgo = false;
 
@@ -264,7 +285,7 @@ function PainelPorFuncao({
         c.coluna_id !== colRevisaoCliente?.id &&
         !estaAtrasado(c),
     );
-    temAlgo = producao.length > 0 || atrasados.length > 0;
+    temAlgo = producao.length > 0 || atrasados.length > 0 || criadosAguardandoCliente.length > 0;
     conteudo = (
       <>
         {producao.length > 0 ? (
@@ -286,6 +307,7 @@ function PainelPorFuncao({
           </Secao>
         ) : null}
         {secaoAtrasados}
+        {secaoCriadosAguardandoCliente}
       </>
     );
   } else if (cargo === "social_media") {
@@ -295,7 +317,11 @@ function PainelPorFuncao({
     const aguardandoCliente = colRevisaoCliente
       ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id)
       : [];
-    temAlgo = paraAprovar.length > 0 || aguardandoCliente.length > 0 || atrasados.length > 0;
+    temAlgo =
+      paraAprovar.length > 0 ||
+      aguardandoCliente.length > 0 ||
+      atrasados.length > 0 ||
+      criadosAguardandoCliente.length > 0;
     conteudo = (
       <>
         {paraAprovar.length > 0 ? (
@@ -324,6 +350,7 @@ function PainelPorFuncao({
           </Secao>
         ) : null}
         {secaoAtrasados}
+        {secaoCriadosAguardandoCliente}
       </>
     );
   } else if (cargo === "gerente_projeto") {
@@ -331,7 +358,11 @@ function PainelPorFuncao({
       ? cartoes.filter((c) => c.coluna_id === colRevisaoInterna.id)
       : [];
     const equipeTemAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id));
-    temAlgo = paraRevisar.length > 0 || atrasados.length > 0 || equipeTemAlgo;
+    temAlgo =
+      paraRevisar.length > 0 ||
+      atrasados.length > 0 ||
+      equipeTemAlgo ||
+      criadosAguardandoCliente.length > 0;
     conteudo = (
       <>
         {paraRevisar.length > 0 ? (
@@ -347,6 +378,7 @@ function PainelPorFuncao({
           </Secao>
         ) : null}
         {secaoAtrasados}
+        {secaoCriadosAguardandoCliente}
         <SecaoEquipe
           responsaveis={responsaveis}
           cartaoPorId={cartaoPorId}
@@ -356,14 +388,17 @@ function PainelPorFuncao({
       </>
     );
   } else if (cargo === "admin" || cargo === "super_admin") {
-    temAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id));
+    temAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id)) || criadosAguardandoCliente.length > 0;
     conteudo = (
-      <SecaoEquipe
-        responsaveis={responsaveis}
-        cartaoPorId={cartaoPorId}
-        membroPorId={membroPorId}
-        estaAtrasado={estaAtrasado}
-      />
+      <>
+        {secaoCriadosAguardandoCliente}
+        <SecaoEquipe
+          responsaveis={responsaveis}
+          cartaoPorId={cartaoPorId}
+          membroPorId={membroPorId}
+          estaAtrasado={estaAtrasado}
+        />
+      </>
     );
   } else {
     const aguardandoCliente = colRevisaoCliente
@@ -374,7 +409,8 @@ function PainelPorFuncao({
       if (!c.cliente_id) continue;
       contagemPorCliente.set(c.cliente_id, (contagemPorCliente.get(c.cliente_id) ?? 0) + 1);
     }
-    temAlgo = meusCartoes.length > 0 || contagemPorCliente.size > 0;
+    temAlgo =
+      meusCartoes.length > 0 || contagemPorCliente.size > 0 || criadosAguardandoCliente.length > 0;
     conteudo = (
       <>
         {meusCartoes.length > 0 ? (
@@ -410,6 +446,7 @@ function PainelPorFuncao({
               ))}
           </Secao>
         ) : null}
+        {secaoCriadosAguardandoCliente}
       </>
     );
   }

@@ -17,10 +17,11 @@ export type Cartao = {
   publicacao: string | null;
   prioridade: string | null;
   tipo_post: string | null;
+  criado_por: string | null;
 };
 
 export const COLUNAS_CARTAO =
-  "id, coluna_id, titulo, cliente_id, prazo, ordem, descricao, legenda, entrega_texto, entrega_arte, agendamento, publicacao, prioridade, tipo_post";
+  "id, coluna_id, titulo, cliente_id, prazo, ordem, descricao, legenda, entrega_texto, entrega_arte, agendamento, publicacao, prioridade, tipo_post, criado_por";
 
 export type Vinculo = { cartao_id: string; perfil_id: string };
 export type Membro = { id: string; nome: string | null; email: string };
