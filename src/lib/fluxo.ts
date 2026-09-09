@@ -1,5 +1,7 @@
 /** Tipos e constantes do Fluxo People, compartilhados entre o quadro e o cartão. */
 
+export const BUCKET_ANEXOS = "fluxo-anexos";
+
 export type Coluna = { id: string; nome: string; ordem: number };
 
 export type Cartao = {
@@ -18,10 +20,11 @@ export type Cartao = {
   prioridade: string | null;
   tipo_post: string | null;
   criado_por: string | null;
+  capa_anexo_id: string | null;
 };
 
 export const COLUNAS_CARTAO =
-  "id, coluna_id, titulo, cliente_id, prazo, ordem, descricao, legenda, entrega_texto, entrega_arte, agendamento, publicacao, prioridade, tipo_post, criado_por";
+  "id, coluna_id, titulo, cliente_id, prazo, ordem, descricao, legenda, entrega_texto, entrega_arte, agendamento, publicacao, prioridade, tipo_post, criado_por, capa_anexo_id";
 
 export type Vinculo = { cartao_id: string; perfil_id: string };
 export type Membro = { id: string; nome: string | null; email: string };
@@ -122,4 +125,9 @@ export function tamanhoLegivel(bytes: number): string {
 /** Chaves do Storage não aceitam qualquer caractere; o nome original fica no banco. */
 export function nomeSeguro(nome: string): string {
   return nome.replace(/[^\w.\-]+/g, "_").slice(0, 120);
+}
+
+/** Só imagem pode virar capa do cartão — mesma checagem usada na aprovação do cliente. */
+export function ehImagem(nome: string): boolean {
+  return /\.(png|jpe?g|gif|webp|avif)$/i.test(nome);
 }

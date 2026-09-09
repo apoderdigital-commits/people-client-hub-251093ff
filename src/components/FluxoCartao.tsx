@@ -8,18 +8,22 @@ import {
   Paperclip,
   Plus,
   Quote,
+  Star,
   Tag,
   Trash2,
   Users,
   X,
 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import {
   classeDaCor,
+  ehImagem,
   iniciais,
   nomeSeguro,
   tamanhoLegivel,
+  BUCKET_ANEXOS,
   CAMPOS_DATA,
   CORES_DISPONIVEIS,
   PRIORIDADES,
@@ -36,7 +40,7 @@ import {
 
 /** types.ts é gerado pelo Lovable e ainda não conhece as tabelas do fluxo. */
 const db = supabase as unknown as SupabaseClient;
-const BUCKET = "fluxo-anexos";
+const BUCKET = BUCKET_ANEXOS;
 
 type Props = {
   cartao: Cartao;
@@ -196,6 +200,8 @@ export function FluxoCartao(props: Props) {
               editavel={editavel}
               onContadores={props.onContadores}
               onErro={setErro}
+              capaAnexoId={cartao.capa_anexo_id}
+              onDefinirCapa={(id) => void props.onAtualizar(cartao.id, { capa_anexo_id: id })}
             />
 
             {editavel ? (
@@ -654,15 +660,20 @@ function Anexos({
   editavel,
   onContadores,
   onErro,
+  capaAnexoId,
+  onDefinirCapa,
 }: {
   cartaoId: string;
   perfilId: string;
   editavel: boolean;
   onContadores: () => void;
   onErro: (m: string) => void;
+  capaAnexoId: string | null;
+  onDefinirCapa: (anexoId: string | null) => void;
 }) {
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [enviando, setEnviando] = useState(false);
+  const [miniaturas, setMiniaturas] = useState<Map<string, string>>(new Map());
   const campo = useRef<HTMLInputElement>(null);
 
   const carregar = useCallback(async () => {
@@ -677,6 +688,31 @@ function Anexos({
   useEffect(() => {
     void carregar();
   }, [carregar]);
+
+  /** Miniaturas só fazem sentido pras imagens — as únicas que podem virar capa. */
+  useEffect(() => {
+    const imagens = anexos.filter((a) => ehImagem(a.nome));
+    const faltando = imagens.filter((a) => !miniaturas.has(a.id));
+    if (faltando.length === 0) return;
+    let ativo = true;
+    (async () => {
+      const pares = await Promise.all(
+        faltando.map(async (a) => {
+          const { data } = await supabase.storage.from(BUCKET).createSignedUrl(a.caminho, 3600);
+          return [a.id, data?.signedUrl ?? null] as const;
+        }),
+      );
+      if (!ativo) return;
+      setMiniaturas((atual) => {
+        const novo = new Map(atual);
+        for (const [id, url] of pares) if (url) novo.set(id, url);
+        return novo;
+      });
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [anexos, miniaturas, BUCKET]);
 
   async function enviar(arquivo: File) {
     setEnviando(true);
@@ -713,6 +749,7 @@ function Anexos({
     await supabase.storage.from(BUCKET).remove([anexo.caminho]);
     const { error } = await db.from("fluxo_anexos").delete().eq("id", anexo.id);
     if (error) onErro("Não foi possível remover o anexo.");
+    if (capaAnexoId === anexo.id) onDefinirCapa(null);
     onContadores();
   }
 
@@ -749,36 +786,66 @@ function Anexos({
         <p className="text-xs text-ink-muted">Nenhum arquivo anexado.</p>
       ) : (
         <div className="flex flex-col gap-1.5">
-          {anexos.map((a) => (
-            <div
-              key={a.id}
-              className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2"
-            >
-              <Paperclip className="size-3.5 shrink-0 text-ink-muted" />
-              <span className="min-w-0 flex-1 truncate text-sm text-ink">{a.nome}</span>
-              <span className="shrink-0 text-[11px] text-ink-muted">
-                {tamanhoLegivel(a.tamanho)}
-              </span>
-              <button
-                type="button"
-                onClick={() => void baixar(a)}
-                className="shrink-0 text-ink-muted transition-colors hover:text-brand"
-                aria-label="Baixar anexo"
+          {anexos.map((a) => {
+            const imagem = ehImagem(a.nome);
+            const ehCapa = capaAnexoId === a.id;
+            const miniatura = miniaturas.get(a.id);
+            return (
+              <div
+                key={a.id}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border bg-background px-3 py-2",
+                  ehCapa ? "border-brand" : "border-border",
+                )}
               >
-                <Download className="size-3.5" />
-              </button>
-              {editavel ? (
+                {miniatura ? (
+                  <img
+                    src={miniatura}
+                    alt=""
+                    className="size-9 shrink-0 rounded object-cover"
+                  />
+                ) : (
+                  <Paperclip className="size-3.5 shrink-0 text-ink-muted" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-sm text-ink">{a.nome}</span>
+                <span className="shrink-0 text-[11px] text-ink-muted">
+                  {tamanhoLegivel(a.tamanho)}
+                </span>
+                {imagem && editavel ? (
+                  <button
+                    type="button"
+                    onClick={() => onDefinirCapa(ehCapa ? null : a.id)}
+                    className={cn(
+                      "shrink-0 transition-colors",
+                      ehCapa ? "text-brand" : "text-ink-muted hover:text-brand",
+                    )}
+                    aria-label={ehCapa ? "Remover como capa do cartão" : "Definir como capa do cartão"}
+                    title={ehCapa ? "Remover como capa do cartão" : "Definir como capa do cartão"}
+                  >
+                    <Star className={cn("size-3.5", ehCapa ? "fill-brand" : "")} />
+                  </button>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => void remover(a)}
-                  className="shrink-0 text-ink-muted transition-colors hover:text-destructive"
-                  aria-label="Remover anexo"
+                  onClick={() => void baixar(a)}
+                  className="shrink-0 text-ink-muted transition-colors hover:text-brand"
+                  aria-label="Baixar anexo"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Download className="size-3.5" />
                 </button>
-              ) : null}
-            </div>
-          ))}
+                {editavel ? (
+                  <button
+                    type="button"
+                    onClick={() => void remover(a)}
+                    className="shrink-0 text-ink-muted transition-colors hover:text-destructive"
+                    aria-label="Remover anexo"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </Secao>

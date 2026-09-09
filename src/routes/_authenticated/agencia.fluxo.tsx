@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -25,6 +25,7 @@ import {
   dataCurta,
   hojeISO,
   iniciais,
+  BUCKET_ANEXOS,
   COLUNAS_CARTAO,
   type Cartao,
   type CartaoEtiqueta,
@@ -219,6 +220,57 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
     for (const lista of mapa.values()) lista.sort((a, b) => a.ordem - b.ordem);
     return mapa;
   }, [colunas, cartoes]);
+
+  /**
+   * Miniaturas de capa: cache por anexo (não por cartão) num ref, pra não
+   * regerar URL assinada a cada re-render do quadro (ex.: arrastar cartão) —
+   * só busca as capas que ainda não estão no cache.
+   */
+  const capaCacheRef = useRef<Map<string, string>>(new Map());
+  const [capaCacheVersao, setCapaCacheVersao] = useState(0);
+  const capaAnexoIds = useMemo(
+    () =>
+      Array.from(
+        new Set(cartoes.map((c) => c.capa_anexo_id).filter((id): id is string => Boolean(id))),
+      ),
+    [cartoes],
+  );
+  const capaAnexoIdsChave = capaAnexoIds.slice().sort().join(",");
+
+  useEffect(() => {
+    const faltando = capaAnexoIds.filter((id) => !capaCacheRef.current.has(id));
+    if (faltando.length === 0) return;
+    let ativo = true;
+    (async () => {
+      const { data } = await db.from("fluxo_anexos").select("id, caminho").in("id", faltando);
+      const anexos = (data as { id: string; caminho: string }[]) ?? [];
+      await Promise.all(
+        anexos.map(async (a) => {
+          const { data: assinado } = await supabase.storage
+            .from(BUCKET_ANEXOS)
+            .createSignedUrl(a.caminho, 3600);
+          if (assinado?.signedUrl) capaCacheRef.current.set(a.id, assinado.signedUrl);
+        }),
+      );
+      if (ativo) setCapaCacheVersao((v) => v + 1);
+    })();
+    return () => {
+      ativo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capaAnexoIdsChave]);
+
+  const capaUrls = useMemo(() => {
+    void capaCacheVersao;
+    const mapa = new Map<string, string>();
+    for (const cartao of cartoes) {
+      if (cartao.capa_anexo_id) {
+        const url = capaCacheRef.current.get(cartao.capa_anexo_id);
+        if (url) mapa.set(cartao.id, url);
+      }
+    }
+    return mapa;
+  }, [cartoes, capaCacheVersao]);
 
   // --- colunas ---
 
@@ -471,6 +523,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
             cartaoEtiquetas={cartaoEtiquetas}
             vinculos={vinculos}
             contadores={contadores}
+            capaUrls={capaUrls}
             editavel={editavel}
             arrastando={arrastando}
             onArrastar={setArrastando}
@@ -547,6 +600,7 @@ function ColunaKanban({
   cartaoEtiquetas,
   vinculos,
   contadores,
+  capaUrls,
   editavel,
   arrastando,
   onArrastar,
@@ -567,6 +621,7 @@ function ColunaKanban({
   cartaoEtiquetas: CartaoEtiqueta[];
   vinculos: Vinculo[];
   contadores: Contadores;
+  capaUrls: Map<string, string>;
   editavel: boolean;
   arrastando: string | null;
   onArrastar: (id: string | null) => void;
@@ -690,6 +745,7 @@ function ColunaKanban({
               .filter((v) => v.cartao_id === cartao.id)
               .map((v) => v.perfil_id)}
             contadores={contadores}
+            capaUrl={capaUrls.get(cartao.id)}
             editavel={editavel}
             arrastando={arrastando}
             onArrastar={onArrastar}
@@ -769,6 +825,7 @@ function MiniCartao({
   etiquetas,
   responsaveis,
   contadores,
+  capaUrl,
   editavel,
   arrastando,
   onArrastar,
@@ -781,6 +838,7 @@ function MiniCartao({
   etiquetas: Etiqueta[];
   responsaveis: string[];
   contadores: Contadores;
+  capaUrl?: string;
   editavel: boolean;
   arrastando: string | null;
   onArrastar: (id: string | null) => void;
@@ -823,84 +881,94 @@ function MiniCartao({
       onClick={() => onAbrir(cartao.id)}
       // select-none: sem isso o navegador inicia uma seleção de texto em vez do
       // arrasto, e o clique acaba apenas abrindo o cartão.
-      className={`cursor-grab select-none rounded-xl border border-border bg-background p-3 shadow-sm transition-shadow hover:shadow-card active:cursor-grabbing ${
+      className={`cursor-grab select-none overflow-hidden rounded-xl border border-border bg-background shadow-sm transition-shadow hover:shadow-card active:cursor-grabbing ${
         arrastando === cartao.id ? "opacity-40" : ""
       }`}
     >
-      {etiquetas.length > 0 ? (
-        <div className="mb-2 flex flex-wrap gap-1">
-          {etiquetas.map((e) => (
-            <span
-              key={e.id}
-              title={e.nome}
-              className={`h-2 w-10 rounded-full ${classeDaCor(e.cor)}`}
-            />
-          ))}
-        </div>
+      {capaUrl ? (
+        <img
+          src={capaUrl}
+          alt=""
+          className="aspect-video w-full object-cover"
+        />
       ) : null}
 
-      <p className="text-sm font-medium text-ink">{cartao.titulo}</p>
-
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        {cliente ? (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
-            {cliente.nome}
-          </span>
-        ) : null}
-        {data ? (
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-              atrasado
-                ? "bg-destructive/10 text-destructive"
-                : hojeMesmo
-                  ? "bg-brand/10 text-brand"
-                  : "bg-muted text-ink-muted"
-            }`}
-          >
-            <CalendarDays className="size-3" />
-            {dataCurta(data)}
-          </span>
-        ) : null}
-        {check && check.total > 0 ? (
-          <span
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-              check.feitos === check.total ? "bg-success/10 text-success" : "bg-muted text-ink-muted"
-            }`}
-          >
-            <CheckSquare className="size-3" />
-            {check.feitos}/{check.total}
-          </span>
-        ) : null}
-        {comentarios > 0 ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
-            <MessageSquare className="size-3" />
-            {comentarios}
-          </span>
-        ) : null}
-        {anexos > 0 ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
-            <Paperclip className="size-3" />
-            {anexos}
-          </span>
-        ) : null}
-        {equipe.length > 0 ? (
-          <span className="ml-auto flex -space-x-1.5">
-            {equipe.slice(0, 3).map((m) => (
+      <div className="p-3">
+        {etiquetas.length > 0 ? (
+          <div className="mb-2 flex flex-wrap gap-1">
+            {etiquetas.map((e) => (
               <span
-                key={m.id}
-                title={m.nome || m.email}
-                className="grid size-6 place-items-center rounded-full border border-card bg-brand text-[10px] font-bold text-brand-foreground"
-              >
-                {iniciais(m.nome || m.email)}
-              </span>
+                key={e.id}
+                title={e.nome}
+                className={`h-2 w-10 rounded-full ${classeDaCor(e.cor)}`}
+              />
             ))}
-            {equipe.length > 3 ? (
-              <span className="grid size-6 place-items-center rounded-full border border-card bg-muted text-[10px] font-bold text-ink-muted">
-                +{equipe.length - 3}
-              </span>
-            ) : null}
-          </span>
+          </div>
         ) : null}
+
+        <p className="text-sm font-medium text-ink">{cartao.titulo}</p>
+
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {cliente ? (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
+              {cliente.nome}
+            </span>
+          ) : null}
+          {data ? (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                atrasado
+                  ? "bg-destructive/10 text-destructive"
+                  : hojeMesmo
+                    ? "bg-brand/10 text-brand"
+                    : "bg-muted text-ink-muted"
+              }`}
+            >
+              <CalendarDays className="size-3" />
+              {dataCurta(data)}
+            </span>
+          ) : null}
+          {check && check.total > 0 ? (
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                check.feitos === check.total ? "bg-success/10 text-success" : "bg-muted text-ink-muted"
+              }`}
+            >
+              <CheckSquare className="size-3" />
+              {check.feitos}/{check.total}
+            </span>
+          ) : null}
+          {comentarios > 0 ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
+              <MessageSquare className="size-3" />
+              {comentarios}
+            </span>
+          ) : null}
+          {anexos > 0 ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-ink-muted">
+              <Paperclip className="size-3" />
+              {anexos}
+            </span>
+          ) : null}
+          {equipe.length > 0 ? (
+            <span className="ml-auto flex -space-x-1.5">
+              {equipe.slice(0, 3).map((m) => (
+                <span
+                  key={m.id}
+                  title={m.nome || m.email}
+                  className="grid size-6 place-items-center rounded-full border border-card bg-brand text-[10px] font-bold text-brand-foreground"
+                >
+                  {iniciais(m.nome || m.email)}
+                </span>
+              ))}
+              {equipe.length > 3 ? (
+                <span className="grid size-6 place-items-center rounded-full border border-card bg-muted text-[10px] font-bold text-ink-muted">
+                  +{equipe.length - 3}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </div>
       </div>
     </div>
   );
