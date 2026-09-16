@@ -2,7 +2,13 @@
 
 export const BUCKET_ANEXOS = "fluxo-anexos";
 
-export type Coluna = { id: string; nome: string; ordem: number };
+export type Coluna = {
+  id: string;
+  nome: string;
+  ordem: number;
+  /** true = cartões nesta coluna usam a entrega da arte como prazo; false = agendamento. */
+  usa_entrega_arte: boolean;
+};
 
 export type Cartao = {
   id: string;

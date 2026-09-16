@@ -9,7 +9,6 @@ import {
   Loader2,
   PenTool,
   Sparkles,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 import { AppHeader } from "@/components/AppHeader";
@@ -76,7 +75,7 @@ function AgenciaInicio() {
   );
 }
 
-type ColunaInfo = { id: string; nome: string; ordem: number };
+type ColunaInfo = { id: string; nome: string; ordem: number; usa_entrega_arte: boolean };
 type CartaoBruto = {
   id: string;
   titulo: string;
@@ -91,7 +90,6 @@ type CartaoBruto = {
 };
 type VinculoBruto = { cartao_id: string; perfil_id: string; created_at?: string };
 type ClienteRef = { id: string; nome: string };
-type MembroRef = { id: string; nome: string | null; email: string };
 
 function normalizarNomeColuna(nome: string): string {
   return nome.trim().toLowerCase();
@@ -102,15 +100,14 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
   const [cartoes, setCartoes] = useState<CartaoBruto[]>([]);
   const [responsaveis, setResponsaveis] = useState<VinculoBruto[]>([]);
   const [clientes, setClientes] = useState<ClienteRef[]>([]);
-  const [membros, setMembros] = useState<MembroRef[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
     let ativo = true;
     (async () => {
-      const [colunasRes, cartoesRes, respRes, clientesRes, membrosRes] = await Promise.all([
-        db.from("fluxo_colunas").select("id, nome, ordem").order("ordem"),
+      const [colunasRes, cartoesRes, respRes, clientesRes] = await Promise.all([
+        db.from("fluxo_colunas").select("id, nome, ordem, usa_entrega_arte").order("ordem"),
         db
           .from("fluxo_cartoes")
           .select(
@@ -118,12 +115,10 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
           ),
         db.from("fluxo_responsaveis").select("cartao_id, perfil_id, created_at"),
         db.from("clientes").select("id, nome"),
-        db.from("profiles").select("id, nome, email").eq("role", "agencia"),
       ]);
       if (!ativo) return;
 
-      const falha =
-        colunasRes.error ?? cartoesRes.error ?? respRes.error ?? clientesRes.error ?? membrosRes.error;
+      const falha = colunasRes.error ?? cartoesRes.error ?? respRes.error ?? clientesRes.error;
       if (falha) {
         setErro(falha.message);
         setCarregando(false);
@@ -134,7 +129,6 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
       setCartoes((cartoesRes.data as CartaoBruto[]) ?? []);
       setResponsaveis((respRes.data as VinculoBruto[]) ?? []);
       setClientes((clientesRes.data as ClienteRef[]) ?? []);
-      setMembros((membrosRes.data as MembroRef[]) ?? []);
       setErro(null);
       setCarregando(false);
     })();
@@ -156,14 +150,14 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
 
     const colunaPorId = new Map(colunas.map((c) => [c.id, c]));
     const clientePorId = new Map(clientes.map((c) => [c.id, c.nome]));
-    const membroPorId = new Map(membros.map((m) => [m.id, m.nome || m.email]));
-    const cartaoPorId = new Map(cartoes.map((c) => [c.id, c]));
+
+    // Coluna de produção/design: conta a entrega da arte. Demais colunas:
+    // conta o agendamento. Ajustável por coluna no próprio quadro do Fluxo.
+    const colunasDataArte = new Set(colunas.filter((c) => c.usa_entrega_arte).map((c) => c.id));
 
     function estaAtrasado(c: CartaoBruto): boolean {
-      const datas = [c.prazo, c.entrega_texto, c.entrega_arte, c.agendamento, c.publicacao].filter(
-        (d): d is string => Boolean(d),
-      );
-      return datas.some((d) => d < hoje) && c.coluna_id !== ultimaColuna?.id;
+      const data = colunasDataArte.has(c.coluna_id) ? c.entrega_arte : c.agendamento;
+      return Boolean(data) && data! < hoje && c.coluna_id !== ultimaColuna?.id;
     }
 
     const meusVinculos = responsaveis.filter((v) => v.perfil_id === perfil.id);
@@ -177,18 +171,17 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
     return {
       colunaPorId,
       clientePorId,
-      membroPorId,
-      cartaoPorId,
       estaAtrasado,
       ultimaColuna,
       colApresentacao,
       colRevisaoInterna,
       colRevisaoCliente,
       meusCartoes,
+      meusCartaoIds,
       criadoEmPorCartao,
       limiteNovo,
     };
-  }, [colunas, cartoes, responsaveis, clientes, membros, perfil.id]);
+  }, [colunas, cartoes, responsaveis, clientes, perfil.id]);
 
   if (carregando) {
     return (
@@ -202,37 +195,33 @@ function PainelFluxo({ perfil }: { perfil: Perfil }) {
     return <p className="mt-7 text-sm text-destructive">{erro}</p>;
   }
 
-  return <PainelPorFuncao perfil={perfil} cartoes={cartoes} responsaveis={responsaveis} {...dados} />;
+  return <PainelPorFuncao perfil={perfil} cartoes={cartoes} {...dados} />;
 }
 
 function PainelPorFuncao({
   perfil,
   cartoes,
-  responsaveis,
   colunaPorId,
   clientePorId,
-  membroPorId,
-  cartaoPorId,
   estaAtrasado,
   colApresentacao,
   colRevisaoInterna,
   colRevisaoCliente,
   meusCartoes,
+  meusCartaoIds,
   criadoEmPorCartao,
   limiteNovo,
 }: {
   perfil: Perfil;
   cartoes: CartaoBruto[];
-  responsaveis: VinculoBruto[];
   colunaPorId: Map<string, ColunaInfo>;
   clientePorId: Map<string, string>;
-  membroPorId: Map<string, string>;
-  cartaoPorId: Map<string, CartaoBruto>;
   estaAtrasado: (c: CartaoBruto) => boolean;
   colApresentacao: ColunaInfo | undefined;
   colRevisaoInterna: ColunaInfo | undefined;
   colRevisaoCliente: ColunaInfo | undefined;
   meusCartoes: CartaoBruto[];
+  meusCartaoIds: Set<string>;
   criadoEmPorCartao: Map<string, string>;
   limiteNovo: Date;
 }) {
@@ -312,10 +301,10 @@ function PainelPorFuncao({
     );
   } else if (cargo === "social_media") {
     const paraAprovar = colApresentacao
-      ? cartoes.filter((c) => c.coluna_id === colApresentacao.id)
+      ? cartoes.filter((c) => c.coluna_id === colApresentacao.id && meusCartaoIds.has(c.id))
       : [];
     const aguardandoCliente = colRevisaoCliente
-      ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id)
+      ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id && meusCartaoIds.has(c.id))
       : [];
     temAlgo =
       paraAprovar.length > 0 ||
@@ -355,14 +344,9 @@ function PainelPorFuncao({
     );
   } else if (cargo === "gerente_projeto") {
     const paraRevisar = colRevisaoInterna
-      ? cartoes.filter((c) => c.coluna_id === colRevisaoInterna.id)
+      ? cartoes.filter((c) => c.coluna_id === colRevisaoInterna.id && meusCartaoIds.has(c.id))
       : [];
-    const equipeTemAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id));
-    temAlgo =
-      paraRevisar.length > 0 ||
-      atrasados.length > 0 ||
-      equipeTemAlgo ||
-      criadosAguardandoCliente.length > 0;
+    temAlgo = paraRevisar.length > 0 || atrasados.length > 0 || criadosAguardandoCliente.length > 0;
     conteudo = (
       <>
         {paraRevisar.length > 0 ? (
@@ -379,38 +363,12 @@ function PainelPorFuncao({
         ) : null}
         {secaoAtrasados}
         {secaoCriadosAguardandoCliente}
-        <SecaoEquipe
-          responsaveis={responsaveis}
-          cartaoPorId={cartaoPorId}
-          membroPorId={membroPorId}
-          estaAtrasado={estaAtrasado}
-        />
-      </>
-    );
-  } else if (cargo === "admin" || cargo === "super_admin") {
-    temAlgo = responsaveis.some((v) => cartaoPorId.has(v.cartao_id)) || criadosAguardandoCliente.length > 0;
-    conteudo = (
-      <>
-        {secaoCriadosAguardandoCliente}
-        <SecaoEquipe
-          responsaveis={responsaveis}
-          cartaoPorId={cartaoPorId}
-          membroPorId={membroPorId}
-          estaAtrasado={estaAtrasado}
-        />
       </>
     );
   } else {
-    const aguardandoCliente = colRevisaoCliente
-      ? cartoes.filter((c) => c.coluna_id === colRevisaoCliente.id)
-      : [];
-    const contagemPorCliente = new Map<string, number>();
-    for (const c of aguardandoCliente) {
-      if (!c.cliente_id) continue;
-      contagemPorCliente.set(c.cliente_id, (contagemPorCliente.get(c.cliente_id) ?? 0) + 1);
-    }
-    temAlgo =
-      meusCartoes.length > 0 || contagemPorCliente.size > 0 || criadosAguardandoCliente.length > 0;
+    // Inclui admin/super_admin: a home page mostra só as demandas atribuídas
+    // à própria pessoa, mesmo pra quem enxerga o quadro inteiro no Fluxo.
+    temAlgo = meusCartoes.length > 0 || criadosAguardandoCliente.length > 0;
     conteudo = (
       <>
         {meusCartoes.length > 0 ? (
@@ -433,19 +391,6 @@ function PainelPorFuncao({
             </Link>
           </Secao>
         ) : null}
-        {contagemPorCliente.size > 0 ? (
-          <Secao icone={ClipboardCheck} titulo="Aguardando aprovação do cliente">
-            {Array.from(contagemPorCliente.entries())
-              .sort((a, b) => b[1] - a[1])
-              .map(([clienteId, total]) => (
-                <LinhaCartao
-                  key={clienteId}
-                  titulo={clientePorId.get(clienteId) ?? "Cliente"}
-                  extra={`${total} ${total === 1 ? "pendente" : "pendentes"}`}
-                />
-              ))}
-          </Secao>
-        ) : null}
         {secaoCriadosAguardandoCliente}
       </>
     );
@@ -461,56 +406,6 @@ function PainelPorFuncao({
         conteudo
       )}
     </div>
-  );
-}
-
-function SecaoEquipe({
-  responsaveis,
-  cartaoPorId,
-  membroPorId,
-  estaAtrasado,
-}: {
-  responsaveis: VinculoBruto[];
-  cartaoPorId: Map<string, CartaoBruto>;
-  membroPorId: Map<string, string>;
-  estaAtrasado: (c: CartaoBruto) => boolean;
-}) {
-  const porColaborador = new Map<string, { total: number; atrasados: number }>();
-  for (const v of responsaveis) {
-    const cartao = cartaoPorId.get(v.cartao_id);
-    if (!cartao) continue;
-    const atual = porColaborador.get(v.perfil_id) ?? { total: 0, atrasados: 0 };
-    atual.total += 1;
-    if (estaAtrasado(cartao)) atual.atrasados += 1;
-    porColaborador.set(v.perfil_id, atual);
-  }
-
-  const linhas = Array.from(porColaborador.entries())
-    .map(([perfilId, c]) => ({ perfilId, nome: membroPorId.get(perfilId) ?? "—", ...c }))
-    .sort((a, b) => b.atrasados - a.atrasados || b.total - a.total);
-
-  if (linhas.length === 0) return null;
-
-  return (
-    <Secao icone={Users} titulo="Pendências por colaborador">
-      {linhas.map((l) => (
-        <div
-          key={l.perfilId}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card"
-        >
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{l.nome}</span>
-          {l.atrasados > 0 ? (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[11px] font-semibold text-destructive">
-              <AlertTriangle className="size-3" />
-              {l.atrasados} {l.atrasados === 1 ? "atrasado" : "atrasados"}
-            </span>
-          ) : null}
-          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-ink-muted">
-            {l.total} {l.total === 1 ? "cartão" : "cartões"}
-          </span>
-        </div>
-      ))}
-    </Secao>
   );
 }
 

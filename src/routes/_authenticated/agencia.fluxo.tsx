@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   Loader2,
   MessageSquare,
+  Paintbrush,
   Paperclip,
   Plus,
   Trash2,
@@ -183,7 +184,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
 
   const carregar = useCallback(async () => {
     const [c, k, v, m, cl, et, ce] = await Promise.all([
-      db.from("fluxo_colunas").select("id, nome, ordem").order("ordem"),
+      db.from("fluxo_colunas").select("id, nome, ordem, usa_entrega_arte").order("ordem"),
       db.from("fluxo_cartoes").select(COLUNAS_CARTAO).order("ordem"),
       db.from("fluxo_responsaveis").select("cartao_id, perfil_id"),
       db.from("profiles").select("id, nome, email").eq("role", "agencia").order("nome"),
@@ -281,7 +282,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
     const { data, error } = await db
       .from("fluxo_colunas")
       .insert({ nome, ordem: colunas.length })
-      .select("id, nome, ordem")
+      .select("id, nome, ordem, usa_entrega_arte")
       .single();
     if (error) return setErro("Não foi possível criar a coluna.");
     setColunas((atual) => [...atual, data as Coluna]);
@@ -291,6 +292,21 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
     setColunas((atual) => atual.map((c) => (c.id === id ? { ...c, nome } : c)));
     const { error } = await db.from("fluxo_colunas").update({ nome }).eq("id", id);
     if (error) setErro("Não foi possível renomear a coluna.");
+  }
+
+  /**
+   * Qual data conta como prazo pros cartões da coluna: entrega da arte
+   * (colunas de produção/design) ou agendamento (demais colunas).
+   */
+  async function alternarColunaDataArte(id: string, usaEntregaArte: boolean) {
+    setColunas((atual) =>
+      atual.map((c) => (c.id === id ? { ...c, usa_entrega_arte: usaEntregaArte } : c)),
+    );
+    const { error } = await db
+      .from("fluxo_colunas")
+      .update({ usa_entrega_arte: usaEntregaArte })
+      .eq("id", id);
+    if (error) setErro("Não foi possível salvar a coluna.");
   }
 
   async function removerColuna(id: string) {
@@ -533,6 +549,7 @@ function Quadro({ editavel, perfilId }: { editavel: boolean; perfilId: string })
             onRenomear={renomearColuna}
             onRemover={removerColuna}
             onMoverColuna={moverColuna}
+            onAlternarDataArte={alternarColunaDataArte}
           />
         ))}
 
@@ -610,6 +627,7 @@ function ColunaKanban({
   onRenomear,
   onRemover,
   onMoverColuna,
+  onAlternarDataArte,
 }: {
   coluna: Coluna;
   primeira: boolean;
@@ -631,6 +649,7 @@ function ColunaKanban({
   onRenomear: (id: string, nome: string) => Promise<void>;
   onRemover: (id: string) => Promise<void>;
   onMoverColuna: (id: string, direcao: -1 | 1) => Promise<void>;
+  onAlternarDataArte: (id: string, usaEntregaArte: boolean) => Promise<void>;
 }) {
   const [novo, setNovo] = useState("");
   const [adicionando, setAdicionando] = useState(false);
@@ -731,6 +750,19 @@ function ColunaKanban({
         </div>
       ) : null}
 
+      <button
+        type="button"
+        disabled={!editavel}
+        onClick={() => void onAlternarDataArte(coluna.id, !coluna.usa_entrega_arte)}
+        title="Data que conta como prazo pros cartões desta coluna"
+        className={`mt-1.5 inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+          coluna.usa_entrega_arte ? "bg-brand/10 text-brand" : "bg-muted text-ink-muted"
+        } ${editavel ? "hover:opacity-80" : "cursor-default"}`}
+      >
+        <Paintbrush className="size-2.5" />
+        Prazo: {coluna.usa_entrega_arte ? "entrega da arte" : "agendamento"}
+      </button>
+
       <div className="mt-2 flex min-h-[40px] flex-col gap-2">
         {cartoes.map((cartao, i) => (
           <MiniCartao
@@ -746,6 +778,7 @@ function ColunaKanban({
               .map((v) => v.perfil_id)}
             contadores={contadores}
             capaUrl={capaUrls.get(cartao.id)}
+            usaEntregaArte={coluna.usa_entrega_arte}
             editavel={editavel}
             arrastando={arrastando}
             onArrastar={onArrastar}
@@ -826,6 +859,7 @@ function MiniCartao({
   responsaveis,
   contadores,
   capaUrl,
+  usaEntregaArte,
   editavel,
   arrastando,
   onArrastar,
@@ -839,6 +873,7 @@ function MiniCartao({
   responsaveis: string[];
   contadores: Contadores;
   capaUrl?: string;
+  usaEntregaArte: boolean;
   editavel: boolean;
   arrastando: string | null;
   onArrastar: (id: string | null) => void;
@@ -852,7 +887,9 @@ function MiniCartao({
   const anexos = contadores.anexos.get(cartao.id) ?? 0;
 
   const hoje = hojeISO();
-  const data = cartao.entrega_arte ?? cartao.prazo;
+  // Na coluna de produção/design conta a entrega da arte; nas demais colunas
+  // conta o agendamento (definido por coluna, no toggle do cabeçalho).
+  const data = usaEntregaArte ? cartao.entrega_arte : cartao.agendamento;
   const atrasado = Boolean(data && data < hoje);
   const hojeMesmo = data === hoje;
 
