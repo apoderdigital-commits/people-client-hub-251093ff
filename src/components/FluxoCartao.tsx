@@ -790,14 +790,24 @@ function Anexos({
       setEnviando(false);
       return onErro(`Falha no upload: ${erroUpload.message}`);
     }
-    const { error } = await db.from("fluxo_anexos").insert({
-      cartao_id: cartaoId,
-      nome: arquivo.name,
-      caminho,
-      tamanho: arquivo.size,
-      enviado_por: perfilId,
-    });
-    if (error) onErro("Arquivo enviado, mas não foi possível registrá-lo.");
+    const { data, error } = await db
+      .from("fluxo_anexos")
+      .insert({
+        cartao_id: cartaoId,
+        nome: arquivo.name,
+        caminho,
+        tamanho: arquivo.size,
+        enviado_por: perfilId,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      onErro("Arquivo enviado, mas não foi possível registrá-lo.");
+    } else if (!capaAnexoId && ehImagem(arquivo.name)) {
+      // Primeira imagem do cartão: já entra como capa, sem precisar escolher.
+      // Com mais de uma imagem, quem decide é a estrela em cada anexo.
+      onDefinirCapa((data as { id: string }).id);
+    }
     await carregar();
     onContadores();
     setEnviando(false);
