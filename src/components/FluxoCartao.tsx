@@ -8,6 +8,7 @@ import {
   Download,
   Loader2,
   Paperclip,
+  Pencil,
   Plus,
   Quote,
   Star,
@@ -70,11 +71,15 @@ export function FluxoCartao(props: Props) {
   const [descricao, setDescricao] = useState(cartao.descricao ?? "");
   const [legenda, setLegenda] = useState(cartao.legenda ?? "");
   const [erro, setErro] = useState<string | null>(null);
+  // Descrição some cartões é longa: fora do modo de edição ela aparece
+  // inteira, sem caixa com barra de rolagem — só vira textarea sob demanda.
+  const [editandoDescricao, setEditandoDescricao] = useState(false);
 
   useEffect(() => {
     setTitulo(cartao.titulo);
     setDescricao(cartao.descricao ?? "");
     setLegenda(cartao.legenda ?? "");
+    setEditandoDescricao(false);
   }, [cartao.id, cartao.titulo, cartao.descricao, cartao.legenda]);
 
   useEffect(() => {
@@ -147,12 +152,30 @@ export function FluxoCartao(props: Props) {
               <h2 className="px-1 text-xl font-bold text-ink">{cartao.titulo}</h2>
             )}
 
-            <Membros {...props} />
-            <Etiquetas {...props} />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Membros {...props} />
+              <Etiquetas {...props} />
+            </div>
 
-            <Secao icone={AlignLeft} titulo="Descrição">
-              {editavel ? (
+            <Secao
+              icone={AlignLeft}
+              titulo="Descrição"
+              acao={
+                editavel && !editandoDescricao ? (
+                  <button
+                    type="button"
+                    onClick={() => setEditandoDescricao(true)}
+                    className="rounded-lg p-1 text-ink-muted transition-colors hover:bg-muted hover:text-ink"
+                    aria-label="Editar descrição"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                ) : null
+              }
+            >
+              {editavel && editandoDescricao ? (
                 <textarea
+                  autoFocus
                   value={descricao}
                   onChange={(e) => setDescricao(e.target.value)}
                   onBlur={() => {
@@ -160,14 +183,21 @@ export function FluxoCartao(props: Props) {
                     if (valor !== (cartao.descricao ?? "")) {
                       void props.onAtualizar(cartao.id, { descricao: valor || null });
                     }
+                    setEditandoDescricao(false);
                   }}
                   rows={4}
                   placeholder="Adicione uma descrição mais detalhada…"
                   className="w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                 />
               ) : (
-                <p className="whitespace-pre-wrap text-sm text-ink-muted">
-                  {cartao.descricao || "Sem descrição."}
+                <p
+                  onClick={() => editavel && setEditandoDescricao(true)}
+                  className={cn(
+                    "whitespace-pre-wrap break-words text-sm text-ink-muted",
+                    editavel ? "cursor-text rounded-lg px-1 py-0.5 transition-colors hover:bg-muted" : "",
+                  )}
+                >
+                  {cartao.descricao || (editavel ? "Clique para adicionar uma descrição…" : "Sem descrição.")}
                 </p>
               )}
             </Secao>
