@@ -3,6 +3,8 @@ import {
   AlignLeft,
   Check,
   CheckSquare,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Loader2,
   Paperclip,
@@ -251,6 +253,33 @@ function Secao({
       </div>
       {children}
     </div>
+  );
+}
+
+const REGEX_URL = /(https?:\/\/[^\s]+)/g;
+
+/** Deixa links clicáveis dentro de texto livre (comentário, item de checklist). */
+function TextoComLinks({ texto }: { texto: string }) {
+  const partes = texto.split(REGEX_URL);
+  return (
+    <>
+      {partes.map((parte, i) =>
+        /^https?:\/\//.test(parte) ? (
+          <a
+            key={i}
+            href={parte}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="text-brand underline hover:opacity-80"
+          >
+            {parte}
+          </a>
+        ) : (
+          <span key={i}>{parte}</span>
+        ),
+      )}
+    </>
   );
 }
 
@@ -609,11 +638,11 @@ function Checklist({
               {item.feito ? <Check className="size-3 text-brand-foreground" /> : null}
             </button>
             <span
-              className={`min-w-0 flex-1 text-sm ${
+              className={`min-w-0 flex-1 break-words text-sm ${
                 item.feito ? "text-ink-muted line-through" : "text-ink"
               }`}
             >
-              {item.texto}
+              <TextoComLinks texto={item.texto} />
             </span>
             {editavel ? (
               <button
@@ -674,7 +703,16 @@ function Anexos({
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [miniaturas, setMiniaturas] = useState<Map<string, string>>(new Map());
+  const [visualizando, setVisualizando] = useState<number | null>(null);
   const campo = useRef<HTMLInputElement>(null);
+  const lightbox = useRef<HTMLDivElement>(null);
+
+  const imagens = anexos.filter((a) => ehImagem(a.nome));
+  const imagemAtual = visualizando !== null ? imagens[visualizando] : undefined;
+
+  useEffect(() => {
+    if (visualizando !== null) lightbox.current?.focus();
+  }, [visualizando]);
 
   const carregar = useCallback(async () => {
     const { data } = await db
@@ -799,11 +837,16 @@ function Anexos({
                 )}
               >
                 {miniatura ? (
-                  <img
-                    src={miniatura}
-                    alt=""
-                    className="size-9 shrink-0 rounded object-cover"
-                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisualizando(imagens.findIndex((img) => img.id === a.id))
+                    }
+                    className="block size-9 shrink-0 overflow-hidden rounded"
+                    aria-label="Ver imagem"
+                  >
+                    <img src={miniatura} alt="" className="size-full object-cover" />
+                  </button>
                 ) : (
                   <Paperclip className="size-3.5 shrink-0 text-ink-muted" />
                 )}
@@ -848,6 +891,83 @@ function Anexos({
           })}
         </div>
       )}
+
+      {visualizando !== null && imagemAtual ? (
+        <div
+          ref={lightbox}
+          tabIndex={-1}
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 outline-none"
+          onClick={() => setVisualizando(null)}
+          // stopPropagation: sem isso, Escape também fecharia o cartão inteiro
+          // atrás da galeria (o listener dele está no document).
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Escape") setVisualizando(null);
+            if (e.key === "ArrowRight") {
+              setVisualizando((i) => (i === null ? i : (i + 1) % imagens.length));
+            }
+            if (e.key === "ArrowLeft") {
+              setVisualizando((i) => (i === null ? i : (i - 1 + imagens.length) % imagens.length));
+            }
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setVisualizando(null);
+            }}
+            className="absolute right-4 top-4 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+            aria-label="Fechar imagem"
+          >
+            <X className="size-5" />
+          </button>
+
+          {imagens.length > 1 ? (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setVisualizando((i) => (i === null ? i : (i - 1 + imagens.length) % imagens.length));
+                }}
+                className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+                aria-label="Imagem anterior"
+              >
+                <ChevronLeft className="size-6" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setVisualizando((i) => (i === null ? i : (i + 1) % imagens.length));
+                }}
+                className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white transition-colors hover:bg-black/70"
+                aria-label="Próxima imagem"
+              >
+                <ChevronRight className="size-6" />
+              </button>
+            </>
+          ) : null}
+
+          {miniaturas.get(imagemAtual.id) ? (
+            <img
+              src={miniaturas.get(imagemAtual.id)}
+              alt={imagemAtual.nome}
+              onClick={(e) => e.stopPropagation()}
+              className="max-h-full max-w-full rounded-xl object-contain"
+            />
+          ) : (
+            <Loader2 className="size-6 animate-spin text-white" />
+          )}
+
+          {imagens.length > 1 ? (
+            <span className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-3 py-1 text-xs font-medium text-white">
+              {visualizando + 1} / {imagens.length}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </Secao>
   );
 }
@@ -953,8 +1073,8 @@ function Comentarios({
                   minute: "2-digit",
                 })}
               </p>
-              <p className="mt-1 whitespace-pre-wrap rounded-lg bg-background px-3 py-2 text-sm text-ink">
-                {c.texto}
+              <p className="mt-1 whitespace-pre-wrap break-words rounded-lg bg-background px-3 py-2 text-sm text-ink">
+                <TextoComLinks texto={c.texto} />
               </p>
               {c.autor_id === perfilId ? (
                 <button
